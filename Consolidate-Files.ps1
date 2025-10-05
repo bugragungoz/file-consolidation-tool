@@ -475,42 +475,6 @@ function Remove-EmptyDirectories {
     Write-Output "Total empty directories deleted: $deletedCount"
     Write-Log "Empty directories removed: $deletedCount" -Level SUCCESS
 }
-        [string]$Path,
-        [bool]$AutoRemove = $false
-    )
-    
-    Write-Verbose "Checking for empty subdirectories"
-    
-    if (-not $AutoRemove) {
-        $choice = Read-Host "Do you want to delete empty subdirectories? (Y/N)"
-        if ($choice -ne 'Y' -and $choice -ne 'y') {
-            Write-Verbose "User declined to remove empty directories"
-            return
-        }
-    }
-    
-    $deletedCount = 0
-    
-    # Get all subdirectories, sorted by depth (deepest first)
-    $subdirs = Get-ChildItem -Path $Path -Directory -Recurse -Force -ErrorAction SilentlyContinue | 
-               Sort-Object { $_.FullName.Split([System.IO.Path]::DirectorySeparatorChar).Count } -Descending
-    
-    foreach ($dir in $subdirs) {
-        try {
-            $items = Get-ChildItem -Path $dir.FullName -Force -ErrorAction SilentlyContinue
-            
-            if ($items.Count -eq 0) {
-                Remove-Item -Path $dir.FullName -Force -ErrorAction Stop
-                Write-Verbose "Deleted empty directory: $($dir.Name)"
-                $deletedCount++
-            }
-        } catch {
-            Write-Error "Error deleting directory '$($dir.Name)': $($_.Exception.Message)"
-        }
-    }
-    
-    Write-Output "Total empty directories deleted: $deletedCount"
-}
 
 # Main script execution
 try {
