@@ -1,7 +1,6 @@
 # File Consolidation Script
 # Author: Bugra
 # Description: Moves files from subdirectories to main directory with safety checks
-# Version: 2.1 - Added logging and progress bar
 
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -61,7 +60,6 @@ function Initialize-Logging {
 File Consolidation Tool - Log File
 ================================================================================
 Start Time: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-Script Version: 2.1
 PowerShell Version: $($PSVersionTable.PSVersion)
 User: $env:USERNAME
 Computer: $env:COMPUTERNAME
