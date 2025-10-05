@@ -25,7 +25,7 @@ A PowerShell script to consolidate files from nested subdirectories into a singl
 
 1. Download the script:
    ```powershell
-   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/bugragungoz/file-consolidation-tool/main/Consolidate-Files.ps1" -OutFile "Consolidate-Files.ps1"
+   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/bugragungoz/file-consolidation-tool/master/Consolidate-Files.ps1" -OutFile "Consolidate-Files.ps1"
    ```
 
 2. Or clone the repository:
