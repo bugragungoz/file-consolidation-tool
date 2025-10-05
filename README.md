@@ -21,34 +21,34 @@ A PowerShell script to consolidate files from nested subdirectories into a singl
 - **Detailed Analysis**: Pre-operation directory structure analysis
 - **Comprehensive Logging**: Automatic log file generation with detailed operation history
 
-## Installation
+## Quick Start
 
-### Step 1: Enable Script Execution (First Time Only)
-
-If this is your first time running PowerShell scripts, you need to enable script execution:
+**Step 1:** Open PowerShell and run these commands (copy and paste all at once):
 
 ```powershell
+# Enable script execution (one-time setup)
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
 
-Press `Y` when prompted to confirm.
-
-### Step 2: Download the Script
-
-**Option A: Direct Download**
-```powershell
+# Download to your Downloads folder
+cd $env:USERPROFILE\Downloads
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/bugragungoz/file-consolidation-tool/master/Consolidate-Files.ps1" -OutFile "Consolidate-Files.ps1"
+
+# Run the script
+.\Consolidate-Files.ps1
 ```
 
-Verify the download:
-```powershell
-Get-Item "Consolidate-Files.ps1"
-```
+When prompted with "Do you want to change the execution policy?", press `Y` and Enter.
 
-**Option B: Clone Repository**
+**That's it!** The script will guide you through the rest.
+
+---
+
+### Alternative: Clone Repository (For Developers)
+
 ```powershell
 git clone https://github.com/bugragungoz/file-consolidation-tool.git
 cd file-consolidation-tool
+.\Consolidate-Files.ps1
 ```
 
 ## Usage
