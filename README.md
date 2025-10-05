@@ -23,21 +23,33 @@ A PowerShell script to consolidate files from nested subdirectories into a singl
 
 ## Installation
 
-1. Download the script:
-   ```powershell
-   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/bugragungoz/file-consolidation-tool/master/Consolidate-Files.ps1" -OutFile "Consolidate-Files.ps1"
-   ```
-   
-   Verify the download:
-   ```powershell
-   Get-Item "Consolidate-Files.ps1"
-   ```
+### Step 1: Enable Script Execution (First Time Only)
 
-2. Or clone the repository:
-   ```powershell
-   git clone https://github.com/bugragungoz/file-consolidation-tool.git
-   cd file-consolidation-tool
-   ```
+If this is your first time running PowerShell scripts, you need to enable script execution:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+Press `Y` when prompted to confirm.
+
+### Step 2: Download the Script
+
+**Option A: Direct Download**
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/bugragungoz/file-consolidation-tool/master/Consolidate-Files.ps1" -OutFile "Consolidate-Files.ps1"
+```
+
+Verify the download:
+```powershell
+Get-Item "Consolidate-Files.ps1"
+```
+
+**Option B: Clone Repository**
+```powershell
+git clone https://github.com/bugragungoz/file-consolidation-tool.git
+cd file-consolidation-tool
+```
 
 ## Usage
 
@@ -121,11 +133,11 @@ Shows what would happen without making any changes.
 
 ## Troubleshooting
 
+**Issue**: Script execution blocked ("running scripts is disabled on this system")  
+**Solution**: Enable script execution (see Step 1 in Installation section above)
+
 **Issue**: "Access Denied" errors  
 **Solution**: Run PowerShell as Administrator or check file permissions
-
-**Issue**: Script execution blocked  
-**Solution**: Set execution policy: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
 
 **Issue**: Files not moving  
 **Solution**: Check that files aren't open in another program, use `-Verbose` flag for details
