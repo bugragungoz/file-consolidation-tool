@@ -1,0 +1,23 @@
+# PowerShell
+*.ps1xml
+*.ps1~
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Test files
+test/
+temp/
+
