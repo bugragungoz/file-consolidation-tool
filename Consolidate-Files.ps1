@@ -98,17 +98,20 @@ function Write-Log {
 function Show-Welcome {
     Write-Host @"
 
-    ____  __  _________ ____  ___ 
-   / __ )/ / / / ____/ __ \/ _ |
-  / __  / / / / / __/ /_/ / __ |
- / /_/ / /_/ / /_/ / _, _/ /_/ |
-/_____/\____/\____/_/ |_/_/  |_|
-                                
-  File Consolidation Tool v2.1 w/Sonnet 4.5
+   ╔═══════════════════════════════════════════════════╗
+   ║                                                   ║
+   ║    ┏┓ ┳┳┏┓┳┓┏┓                                    ║
+   ║    ┣┫┃┃┃┓┣┫┣┫  file-consolidation-tool           ║
+   ║    ┻┗┗┛┗┛┛┗┛┗                                    ║
+   ║                                                   ║
+   ║    [+] Consolidate nested files into root dir    ║
+   ║    [+] Smart conflict resolution                 ║
+   ║    [+] Safe operation with logging               ║
+   ║                                                   ║
+   ╚═══════════════════════════════════════════════════╝
 
-"@ -ForegroundColor Cyan
+"@ -ForegroundColor Green
 
-    Write-Host "================================================" -ForegroundColor Yellow
     Write-Host ""
     Write-Log "Script started" -Level INFO
 }
