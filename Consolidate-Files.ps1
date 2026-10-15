@@ -1,6 +1,74 @@
-# File Consolidation Script
-# Author: Bugra
-# Description: Moves files from subdirectories to main directory with safety checks
+<#
+.SYNOPSIS
+Moves the files in a folder's subfolders up into the folder itself.
+
+.DESCRIPTION
+Consolidate-Files.ps1 finds every file in the subfolders of a folder and moves it into that
+folder, so a tree such as Photos\2023\Trip\a.jpg ends up as Photos\a.jpg. It shows what it
+found first and asks before it moves anything.
+
+Hidden and system files and folders (such as desktop.ini or .git) stay where they are unless
+-IncludeHidden is given, linked folders are never entered, and the script never works on a whole
+drive or a system folder. When a name is already taken, -ConflictAction decides what happens.
+-WhatIf lists every move without making it.
+
+Run without parameters, the script asks for each choice. Every run writes a log next to the script
+unless -NoLog is given.
+
+.PARAMETER Path
+The folder whose subfolders are emptied into it. Without it, the script asks for one.
+
+.PARAMETER ExtensionFilter
+Moves only files with these extensions, written as txt, .txt or *.txt, as a list or comma-separated.
+Without it, every file is moved.
+
+.PARAMETER ConflictAction
+What to do when the folder already has a file with the same name: Rename (photo_1.jpg),
+Overwrite, Skip, or Ask for each one (the default).
+
+.PARAMETER RemoveEmptyDirectories
+Deletes the subfolders the move left empty. Without it, the script asks in interactive mode and
+keeps them when -Path is given.
+
+.PARAMETER IncludeHidden
+Also moves hidden and system files and the files in hidden folders.
+
+.PARAMETER Force
+Moves without asking for confirmation first.
+
+.PARAMETER NoLog
+Writes no log file.
+
+.EXAMPLE
+.\Consolidate-Files.ps1
+
+Asks for the folder, the file types and what to do, step by step.
+
+.EXAMPLE
+.\Consolidate-Files.ps1 -Path "D:\Photos" -WhatIf
+
+Lists every move it would make and changes nothing.
+
+.EXAMPLE
+.\Consolidate-Files.ps1 -Path "D:\Photos" -ExtensionFilter jpg,png -ConflictAction Rename
+
+Moves only .jpg and .png files and numbers the ones whose name is taken.
+
+.EXAMPLE
+.\Consolidate-Files.ps1 -Path "D:\Downloads\Course" -ConflictAction Skip -RemoveEmptyDirectories -Force
+
+Moves everything without asking, leaves files whose name is taken in place and deletes the
+emptied subfolders.
+
+.NOTES
+Exit code 0 when every chosen file was moved, skipped or the run was cancelled; 1 when a file
+could not be moved or the run stopped with an error.
+
+.LINK
+https://github.com/bugragungoz/file-consolidation-tool
+#>
+
+#Requires -Version 5.1
 
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -47,16 +115,16 @@ function Initialize-Logging {
         Write-Verbose "Logging disabled by user"
         return
     }
-    
+
     $scriptPath = $PSScriptRoot
     if ([string]::IsNullOrWhiteSpace($scriptPath)) {
         $scriptPath = Get-Location
     }
-    
+
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $logFileName = "FileConsolidation_$timestamp.log"
     $script:LogFile = Join-Path -Path $scriptPath -ChildPath $logFileName
-    
+
     try {
         $header = @"
 ================================================================================
@@ -83,9 +151,9 @@ function Write-Log {
         [ValidateSet('INFO', 'WARNING', 'ERROR', 'SUCCESS', 'DEBUG')]
         [string]$Level = 'INFO'
     )
-    
+
     if ($null -eq $script:LogFile) { return }
-    
+
     try {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
@@ -95,38 +163,46 @@ function Write-Log {
     }
 }
 
-# ASCII Art Welcome
+# Welcome: the banner greets an interactive run; a run with -Path, often from a scheduled task or
+# another script, prints one line instead.
 function Show-Welcome {
+    Write-Log "Script started" -Level INFO
+    if (-not [string]::IsNullOrWhiteSpace($Path)) {
+        Write-Host "File Consolidation Tool" -ForegroundColor Green
+        Write-Host ""
+        return
+    }
+
     Write-Host @"
 
-@@@@@@@   @@@  @@@   @@@@@@@@  @@@@@@@    @@@@@@  
-@@@@@@@@  @@@  @@@  @@@@@@@@@  @@@@@@@@  @@@@@@@@ 
-@@!  @@@  @@!  @@@  !@@        @@!  @@@  @@!  @@@ 
-!@   @!@  !@!  @!@  !@!        !@!  @!@  !@!  @!@ 
-@!@!@!@   @!@  !@!  !@! @!@!@  @!@!!@!   @!@!@!@! 
-!!!@!!!!  !@!  !!!  !!! !!@!!  !!@!@!    !!!@!!!! 
-!!:  !!!  !!:  !!!  :!!   !!:  !!: :!!   !!:  !!! 
-:!:  !:!  :!:  !:!  :!:   !::  :!:  !:!  :!:  !:! 
- :: ::::  ::::: ::   ::: ::::  ::   :::  ::   ::: 
-:: : ::    : :  :    :: :: :    :   : :   :   : :       
+@@@@@@@   @@@  @@@   @@@@@@@@  @@@@@@@    @@@@@@
+@@@@@@@@  @@@  @@@  @@@@@@@@@  @@@@@@@@  @@@@@@@@
+@@!  @@@  @@!  @@@  !@@        @@!  @@@  @@!  @@@
+!@   @!@  !@!  @!@  !@!        !@!  @!@  !@!  @!@
+@!@!@!@   @!@  !@!  !@! @!@!@  @!@!!@!   @!@!@!@!
+!!!@!!!!  !@!  !!!  !!! !!@!!  !!@!@!    !!!@!!!!
+!!:  !!!  !!:  !!!  :!!   !!:  !!: :!!   !!:  !!!
+:!:  !:!  :!:  !:!  :!:   !::  :!:  !:!  :!:  !:!
+ :: ::::  ::::: ::   ::: ::::  ::   :::  ::   :::
+:: : ::    : :  :    :: :: :    :   : :   :   : :
 
 "@ -ForegroundColor Green
 
     Write-Host ""
-    Write-Log "Script started" -Level INFO
 }
 
 # Function to get directory from user (interactive mode)
 function Get-TargetDirectory {
     while ($true) {
-        $path = Read-Host "Enter the target directory path"
-        
+        # Explorer's "Copy as path" puts the path in quotes.
+        $path = (Read-Host "Enter the target directory path").Trim().Trim('"')
+
         if ([string]::IsNullOrWhiteSpace($path)) {
             Write-Warning "Path cannot be empty!"
             Write-Log "User entered empty path" -Level WARNING
             continue
         }
-        
+
         if (Test-Path -LiteralPath $path -PathType Container) {
             Write-Log "Target directory selected: $path" -Level INFO
             return $path
@@ -136,7 +212,8 @@ function Get-TargetDirectory {
             $retry = Read-Host "Try again? (Y/N)"
             if ($retry -ne 'Y' -and $retry -ne 'y') {
                 Write-Log "User cancelled directory selection" -Level INFO
-                throw "Operation cancelled by user."
+                Write-Host "Operation cancelled."
+                exit 0
             }
         }
     }
@@ -247,18 +324,18 @@ function Get-DirectoryAnalysis {
         [string]$Path,
         [bool]$IncludeHidden
     )
-    
+
     Write-Verbose "Analyzing directory structure at: $Path"
     Write-Log "Starting directory analysis: $Path" -Level INFO
-    
+
     $content = Get-FolderContent -Path $Path -IncludeHidden $IncludeHidden
 
     # The script and its log are never moved, even when they sit in a subfolder.
     $ownFiles = @($script:ScriptFile, $script:LogFile) | Where-Object { $_ }
     $subdirFiles = @($content.SubdirFiles | Where-Object { $ownFiles -notcontains $_.FullName })
-    
+
     $fileTypes = $subdirFiles | Group-Object Extension | Sort-Object Count -Descending
-    
+
     $analysis = @{
         TotalSubdirectories = $content.Subdirectories.Count
         TotalFiles = $content.RootFiles.Count + $content.SubdirFiles.Count
@@ -269,10 +346,10 @@ function Get-DirectoryAnalysis {
         FileTypes = $fileTypes
         SubdirFilesList = $subdirFiles
     }
-    
+
     Write-Verbose "Analysis complete: $($analysis.SubdirectoryFiles) files in subdirectories"
     Write-Log "Analysis complete - Subdirs: $($analysis.TotalSubdirectories), Files: $($analysis.TotalFiles), Subdir Files: $($analysis.SubdirectoryFiles), Hidden left out: $($analysis.HiddenLeftOut), Links left out: $($analysis.LinksLeftOut)" -Level INFO
-    
+
     return $analysis
 }
 
@@ -281,29 +358,29 @@ function Show-Analysis {
     param (
         [hashtable]$Analysis
     )
-    
-    Write-Output "`n================================================"
-    Write-Output "DIRECTORY ANALYSIS RESULTS"
-    Write-Output "================================================"
-    Write-Output "Total subdirectories: $($Analysis.TotalSubdirectories)"
-    Write-Output "Total files: $($Analysis.TotalFiles)"
-    Write-Output "Files in root directory: $($Analysis.RootFiles)"
-    Write-Output "Files in subdirectories: $($Analysis.SubdirectoryFiles)"
+
+    Write-Host "`n================================================"
+    Write-Host "DIRECTORY ANALYSIS RESULTS"
+    Write-Host "================================================"
+    Write-Host "Total subdirectories: $($Analysis.TotalSubdirectories)"
+    Write-Host "Total files: $($Analysis.TotalFiles)"
+    Write-Host "Files in root directory: $($Analysis.RootFiles)"
+    Write-Host "Files in subdirectories: $($Analysis.SubdirectoryFiles)"
     if ($Analysis.HiddenLeftOut -gt 0) {
-        Write-Output "Hidden or system items left out: $($Analysis.HiddenLeftOut) (-IncludeHidden moves them)"
+        Write-Host "Hidden or system items left out: $($Analysis.HiddenLeftOut) (-IncludeHidden moves them)"
     }
     if ($Analysis.LinksLeftOut -gt 0) {
-        Write-Output "Linked folders not entered: $($Analysis.LinksLeftOut)"
+        Write-Host "Linked folders not entered: $($Analysis.LinksLeftOut)"
     }
-    
+
     if ($Analysis.FileTypes.Count -gt 0) {
-        Write-Output "`nFile types in subdirectories:"
+        Write-Host "`nFile types in subdirectories:"
         foreach ($type in $Analysis.FileTypes) {
             $ext = if ([string]::IsNullOrWhiteSpace($type.Name)) { "(no extension)" } else { $type.Name }
-            Write-Output "  $ext : $($type.Count) files"
+            Write-Host "  $ext : $($type.Count) files"
         }
     }
-    Write-Output "================================================`n"
+    Write-Host "================================================`n"
 }
 
 # Function to get file type filter from user (interactive mode)
@@ -311,25 +388,25 @@ function Get-FileTypeFilter {
     param (
         [hashtable]$Analysis
     )
-    
+
     Write-Host "File Type Selection:" -ForegroundColor Yellow
     Write-Host "1. Move ALL file types (default)" -ForegroundColor White
     Write-Host "2. Select specific file types" -ForegroundColor White
-    
+
     $choice = Read-Host "`nEnter your choice (1 or 2)"
-    
+
     if ($choice -eq '2') {
         Write-Host "`nEnter file extensions to move (comma-separated, e.g., txt, pdf, jpg)" -ForegroundColor Yellow
         Write-Host "Or press Enter to move all types" -ForegroundColor Gray
         $answer = Read-Host "Extensions"
         $extensions = ConvertTo-ExtensionList -Value $answer
-        
+
         if ($extensions.Count -gt 0) {
             Write-Log "User selected extension filter: $($extensions -join ', ')" -Level INFO
             return $extensions
         }
     }
-    
+
     Write-Log "User selected to move all file types" -Level INFO
     return @()
 }
@@ -367,7 +444,7 @@ function Resolve-FileConflict {
         [string]$DestinationPath,
         [string]$ConflictStrategy
     )
-    
+
     # A name is taken if a file has it, or if an earlier move of this run was given it: under -WhatIf
     # nothing moves, and the preview must still number the second x.txt like the real run would.
     if (-not (Test-DestinationTaken -Path $DestinationPath)) {
@@ -376,10 +453,10 @@ function Resolve-FileConflict {
             Destination = $DestinationPath
         }
     }
-    
+
     $fileName = [System.IO.Path]::GetFileName($SourcePath)
     Write-Log "File conflict detected: $fileName" -Level WARNING
-    
+
     # If strategy is Ask, prompt user for first conflict
     if ($ConflictStrategy -eq 'Ask') {
         Write-Warning "File conflict detected: $fileName already exists in destination."
@@ -390,11 +467,11 @@ function Resolve-FileConflict {
         Write-Host "  (A)ll Rename - Rename all conflicts" -ForegroundColor White
         Write-Host "  (W)rite All - Overwrite all conflicts" -ForegroundColor White
         Write-Host "  (N)one - Skip all conflicts" -ForegroundColor White
-        
+
         do {
             $choice = (Read-Host "Your choice").ToUpper()
         } while ($choice -notin @('R', 'O', 'S', 'A', 'W', 'N'))
-        
+
         switch ($choice) {
             'A' { $script:GlobalConflictAction = 'Rename'; $ConflictStrategy = 'Rename'; Write-Log "User chose: Rename all conflicts" -Level INFO }
             'W' { $script:GlobalConflictAction = 'Overwrite'; $ConflictStrategy = 'Overwrite'; Write-Log "User chose: Overwrite all conflicts" -Level INFO }
@@ -404,7 +481,7 @@ function Resolve-FileConflict {
             'S' { $ConflictStrategy = 'Skip'; Write-Log "User chose: Skip this file" -Level INFO }
         }
     }
-    
+
     # Apply the strategy
     switch ($ConflictStrategy) {
         'Rename' {
@@ -412,13 +489,13 @@ function Resolve-FileConflict {
             $baseName = [System.IO.Path]::GetFileNameWithoutExtension($SourcePath)
             $extension = [System.IO.Path]::GetExtension($SourcePath)
             $counter = 1
-            
+
             do {
                 $newName = "${baseName}_${counter}${extension}"
                 $newPath = Join-Path -Path $directory -ChildPath $newName
                 $counter++
             } while (Test-DestinationTaken -Path $newPath)
-            
+
             Write-Verbose "Renaming to: $newName"
             Write-Log "Conflict resolved by renaming: $fileName -> $newName" -Level INFO
             return @{
@@ -453,30 +530,30 @@ function Move-FilesToRoot {
         [array]$ExtensionFilter,
         [string]$ConflictStrategy
     )
-    
+
     $movedCount = 0
     $skippedCount = 0
     $errorCount = 0
-    
+
     Write-Verbose "Starting file move operation with $($Files.Count) files"
     Write-Log "Starting file move operation - Total files to process: $($Files.Count)" -Level INFO
     Write-Host "`nStarting file move operation..."
     Write-Host "================================================"
-    
+
     # Initialize global conflict action if using Ask strategy
     $script:GlobalConflictAction = $null
     $script:PlannedDestinations = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
-    
+
     # Filter files if extension filter is specified
     $filesToMove = if ($ExtensionFilter.Count -gt 0) {
         $Files | Where-Object { $_.Extension.ToLower() -in $ExtensionFilter }
     } else {
         $Files
     }
-    
+
     $totalFiles = $filesToMove.Count
     Write-Log "Files matching filter: $totalFiles" -Level INFO
-    
+
     if ($totalFiles -eq 0) {
         Write-Warning "No files match the specified filter."
         Write-Log "No files to move after applying filter" -Level WARNING
@@ -486,28 +563,28 @@ function Move-FilesToRoot {
             Errors = 0
         }
     }
-    
+
     $currentFile = 0
-    
+
     foreach ($file in $filesToMove) {
         try {
             $currentFile++
-            
+
             # Update progress bar
             $percentComplete = [math]::Round(($currentFile / $totalFiles) * 100, 2)
             $status = "Processing file $currentFile of $totalFiles"
             $currentActivity = "Moving: $($file.Name)"
-            
+
             Write-Progress -Activity "File Consolidation" -Status $status -CurrentOperation $currentActivity -PercentComplete $percentComplete
-            
+
             $destinationPath = Join-Path -Path $RootPath -ChildPath $file.Name
-            
+
             # Use global conflict action if set, otherwise use parameter
             $currentStrategy = if ($script:GlobalConflictAction) { $script:GlobalConflictAction } else { $ConflictStrategy }
-            
+
             # Handle conflicts
             $resolution = Resolve-FileConflict -SourcePath $file.FullName -DestinationPath $destinationPath -ConflictStrategy $currentStrategy
-            
+
             if ($resolution.Action -eq 'Skip') {
                 $skippedCount++
                 Write-Log "Skipped: $($file.Name)" -Level INFO
@@ -525,7 +602,7 @@ function Move-FilesToRoot {
                 }
                 continue
             }
-            
+
             # Move file with appropriate action
             if ($resolution.Action -eq 'Overwrite') {
                 Move-Item -LiteralPath $file.FullName -Destination $resolution.Destination -Force -ErrorAction Stop
@@ -534,22 +611,22 @@ function Move-FilesToRoot {
                 Move-Item -LiteralPath $file.FullName -Destination $resolution.Destination -ErrorAction Stop
                 Write-Log "Moved: $($file.FullName) -> $($resolution.Destination)" -Level SUCCESS
             }
-            
+
             [void]$script:PlannedDestinations.Add($resolution.Destination)
             $movedCount++
-            
+
         } catch {
             Write-Error "Error moving file '$($file.Name)': $($_.Exception.Message)"
             Write-Log "ERROR moving file '$($file.Name)': $($_.Exception.Message)" -Level ERROR
             $errorCount++
         }
     }
-    
+
     # Clear progress bar
     Write-Progress -Activity "File Consolidation" -Completed
-    
-    # Write-Host, not Write-Output: this function returns its counts, and anything written to the
-    # output would be captured with them instead of reaching the screen.
+
+    # Write-Host: this function returns its counts, and anything written to the output would be
+    # captured with them instead of reaching the screen.
     Write-Host "================================================"
     if ($WhatIfPreference) {
         Write-Host "Would move: $movedCount (nothing was changed)" -ForegroundColor Green
@@ -559,9 +636,9 @@ function Move-FilesToRoot {
     Write-Host "Skipped: $skippedCount"
     Write-Host "Failed:  $errorCount" -ForegroundColor $(if ($errorCount -gt 0) { 'Red' } else { 'Gray' })
     Write-Host "================================================`n"
-    
+
     Write-Log "Move operation completed - Moved: $movedCount, Skipped: $skippedCount, Errors: $errorCount" -Level SUCCESS
-    
+
     return @{
         Moved = $movedCount
         Skipped = $skippedCount
@@ -576,10 +653,10 @@ function Remove-EmptyDirectories {
         [bool]$AutoRemove = $false,
         [bool]$IncludeHidden = $false
     )
-    
+
     Write-Verbose "Checking for empty subdirectories"
     Write-Log "Checking for empty subdirectories" -Level INFO
-    
+
     if (-not $AutoRemove) {
         $choice = Read-Host "Do you want to delete empty subdirectories? (Y/N)"
         if ($choice -ne 'Y' -and $choice -ne 'y') {
@@ -589,31 +666,31 @@ function Remove-EmptyDirectories {
         }
         Write-Log "User confirmed removal of empty directories" -Level INFO
     }
-    
+
     $deletedCount = 0
-    
+
     # The same folders the move looked in, deepest first: hidden and system folders (such as .git)
     # are left alone unless -IncludeHidden is given, and linked folders are never entered.
     $subdirs = (Get-FolderContent -Path $Path -IncludeHidden $IncludeHidden).Subdirectories |
                Sort-Object { $_.FullName.Split([System.IO.Path]::DirectorySeparatorChar).Count } -Descending
-    
+
     $totalDirs = $subdirs.Count
     $currentDir = 0
-    
+
     foreach ($dir in $subdirs) {
         try {
             $currentDir++
-            
+
             # Update progress bar
             if ($totalDirs -gt 0) {
                 $percentComplete = [math]::Round(($currentDir / $totalDirs) * 100, 2)
                 Write-Progress -Activity "Cleaning Empty Directories" -Status "Processing directory $currentDir of $totalDirs" -CurrentOperation $dir.Name -PercentComplete $percentComplete
             }
-            
+
             # Hidden files count as content. DirectoryInfo.Delete() without arguments deletes only an
             # empty folder, so a folder that could not be read is never deleted with its contents.
             $items = Get-ChildItem -LiteralPath $dir.FullName -Force -ErrorAction Stop
-            
+
             if ($items.Count -eq 0) {
                 $dir.Delete()
                 Write-Verbose "Deleted empty directory: $($dir.Name)"
@@ -625,11 +702,11 @@ function Remove-EmptyDirectories {
             Write-Log "ERROR deleting directory '$($dir.Name)': $($_.Exception.Message)" -Level ERROR
         }
     }
-    
+
     # Clear progress bar
     Write-Progress -Activity "Cleaning Empty Directories" -Completed
-    
-    Write-Output "Total empty directories deleted: $deletedCount"
+
+    Write-Host "Total empty directories deleted: $deletedCount"
     Write-Log "Empty directories removed: $deletedCount" -Level SUCCESS
 }
 
@@ -637,15 +714,15 @@ function Remove-EmptyDirectories {
 try {
     # Initialize logging
     Initialize-Logging
-    
+
     # Show welcome banner
     Show-Welcome
-    
+
     if ($null -ne $script:LogFile) {
         Write-Host "Log file: $script:LogFile" -ForegroundColor Gray
         Write-Host ""
     }
-    
+
     # Get target directory (from parameter or user input)
     if ([string]::IsNullOrWhiteSpace($Path)) {
         $targetPath = Get-TargetDirectory
@@ -658,20 +735,20 @@ try {
     if (Test-ProtectedFolder -Path $targetPath) {
         throw "'$targetPath' is a whole drive or a system folder. Choose a folder inside it."
     }
-    
+
     # Analyze directory
     $analysis = Get-DirectoryAnalysis -Path $targetPath -IncludeHidden $IncludeHidden.IsPresent
-    
+
     # Show analysis
     Show-Analysis -Analysis $analysis
-    
+
     # Check if there are files to move
     if ($analysis.SubdirectoryFiles -eq 0) {
         Write-Warning "No files found in subdirectories. Nothing to move."
         Write-Log "No files found in subdirectories" -Level WARNING
         exit 0
     }
-    
+
     # Get file type filter (from parameter or user input)
     $extensions = ConvertTo-ExtensionList -Value $ExtensionFilter
     if ($PSBoundParameters.ContainsKey('ExtensionFilter') -and $extensions.Count -eq 0) {
@@ -688,7 +765,7 @@ try {
         Write-Verbose "No extension filter specified, processing all file types"
         Write-Log "No extension filter specified, processing all file types" -Level INFO
     }
-    
+
     # Ask before moving anything. ShouldProcess alone asks only when -Confirm is given, so the
     # question goes through ShouldContinue. -Force skips it, and -WhatIf needs no answer: it
     # changes nothing and lists each move instead.
@@ -706,10 +783,10 @@ try {
     } else {
         Write-Log "Operation forced by -Force parameter" -Level INFO
     }
-    
+
     # Move files
     $result = Move-FilesToRoot -RootPath $targetPath -Files $analysis.SubdirFilesList -ExtensionFilter $extensions -ConflictStrategy $ConflictAction
-    
+
     # Remove empty directories: with -RemoveEmptyDirectories, or when the user says so in
     # interactive mode. With a -Path the script runs unattended and never asks. A -WhatIf run moved
     # nothing, so it has nothing to clean up.
@@ -720,7 +797,7 @@ try {
             Remove-EmptyDirectories -Path $targetPath -AutoRemove $false -IncludeHidden $IncludeHidden.IsPresent
         }
     }
-    
+
     # A file that could not be moved makes the run fail, so a scheduled task or another script can
     # tell; the files that were moved stay moved.
     if ($result.Errors -gt 0) {
@@ -730,7 +807,7 @@ try {
         Write-Host "`nDone."
     }
     Write-Verbose "Summary: $($result.Moved) moved, $($result.Skipped) skipped, $($result.Errors) errors"
-    
+
     # Write final summary to log
     $endTime = Get-Date
     $duration = $endTime - $script:ScriptStartTime
@@ -746,13 +823,13 @@ try {
     } else {
         Write-Log "Script completed with errors" -Level ERROR
     }
-    
+
     if ($null -ne $script:LogFile) {
         Write-Host "`nDetailed log saved to: $script:LogFile" -ForegroundColor Green
     }
-    
+
 } catch {
-    Write-Error "FATAL ERROR: $($_.Exception.Message)"
+    $PSCmdlet.WriteError($_)
     Write-Verbose $_.ScriptStackTrace
     Write-Log "FATAL ERROR: $($_.Exception.Message)" -Level ERROR
     Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level ERROR
@@ -760,8 +837,14 @@ try {
 } finally {
     if ([string]::IsNullOrWhiteSpace($Path)) {
         # Interactive mode - wait for keypress
-        Write-Host "`nPress any key to exit..." -ForegroundColor Gray
-        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        # Keeps the window of a "Run with PowerShell" start open. Hosts without a console to read
+        # from, such as the ISE or redirected input, cannot wait for a key.
+        try {
+            Write-Host "`nPress any key to exit..." -ForegroundColor Gray
+            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        } catch {
+            Write-Verbose "Could not wait for a key: $($_.Exception.Message)"
+        }
     }
 }
 
