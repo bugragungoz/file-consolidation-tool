@@ -149,6 +149,16 @@ Describe 'Consolidate-Files.ps1' {
             Get-RelativeFile $root | Should -Be @('a/one.txt')
         }
 
+        It 'refuses a whole drive' {
+            $driveRoot = [System.IO.Path]::GetPathRoot($TestDrive)
+
+            # -WhatIf as well, so that a script without the check would still change nothing.
+            $run = Invoke-Consolidation '-Path', $driveRoot, '-NoLog', '-ConflictAction', 'Rename', '-WhatIf'
+
+            $run.ExitCode | Should -Be 1
+            $run.Output | Should -Match 'whole drive or a system folder'
+        }
+
         It 'does not ask about empty folders when a path is given' {
             $root = New-Tree 'noprompt' 'a/one.txt'
 

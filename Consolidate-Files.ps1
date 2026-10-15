@@ -212,6 +212,35 @@ function Get-FolderContent {
     return $content
 }
 
+# Function to tell whether a folder must never be flattened: a whole drive, the Windows folder,
+# Program Files, ProgramData, the Users folder or a profile folder itself. Moving every file under
+# one of them into it would wreck Windows, the installed programs or the user's folders.
+function Test-ProtectedFolder {
+    param (
+        [string]$Path
+    )
+
+    $separators = [char[]]@('\', '/')
+    $protected = @(
+        [System.IO.Path]::GetPathRoot($Path)
+        $env:SystemRoot
+        $env:ProgramFiles
+        ${env:ProgramFiles(x86)}
+        $env:ProgramData
+        $env:USERPROFILE
+        $HOME
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    if ($env:USERPROFILE) { $protected += Split-Path -Parent $env:USERPROFILE }
+
+    $folder = $Path.TrimEnd($separators)
+    foreach ($candidate in $protected) {
+        if ([string]::Equals($folder, $candidate.TrimEnd($separators), [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+    return $false
+}
+
 # Function to analyze directory structure
 function Get-DirectoryAnalysis {
     param (
@@ -626,6 +655,9 @@ try {
         Write-Log "Using provided path: $targetPath" -Level INFO
     }
     $targetPath = Resolve-TargetPath -Path $targetPath
+    if (Test-ProtectedFolder -Path $targetPath) {
+        throw "'$targetPath' is a whole drive or a system folder. Choose a folder inside it."
+    }
     
     # Analyze directory
     $analysis = Get-DirectoryAnalysis -Path $targetPath -IncludeHidden $IncludeHidden.IsPresent
