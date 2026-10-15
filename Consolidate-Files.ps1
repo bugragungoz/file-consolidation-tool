@@ -115,6 +115,11 @@ function Initialize-Logging {
         Write-Verbose "Logging disabled by user"
         return
     }
+    # A -WhatIf run changes nothing, and Out-File would print "What if" for every log line.
+    if ($WhatIfPreference) {
+        Write-Verbose "No log for a -WhatIf run"
+        return
+    }
 
     $scriptPath = $PSScriptRoot
     if ([string]::IsNullOrWhiteSpace($scriptPath)) {

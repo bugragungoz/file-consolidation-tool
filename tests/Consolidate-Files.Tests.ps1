@@ -180,6 +180,19 @@ Describe 'Consolidate-Files.ps1' {
             $run.Output | Should -Match 'What if:.*x\.txt'
             $run.Output | Should -Match 'What if:.*x_1\.txt'
         }
+
+        It '-WhatIf writes no log either' {
+            $root = New-Tree 'whatiflog' 'a/x.txt'
+            $copy = Join-Path $TestDrive 'whatiflog-tool/Consolidate-Files.ps1'
+            New-Item -ItemType Directory -Path (Split-Path -Parent $copy) | Out-Null
+            Copy-Item -LiteralPath $script:ScriptPath -Destination $copy
+
+            $output = & $script:Shell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $copy -Path $root -ConflictAction Rename -WhatIf 2>&1 | Out-String
+
+            $LASTEXITCODE | Should -Be 0 -Because $output
+            $output | Should -Not -Match 'Output to File'
+            Get-ChildItem -LiteralPath (Split-Path -Parent $copy) -Filter '*.log' | Should -BeNullOrEmpty
+        }
     }
 
     Context 'Choosing files' {
