@@ -7,7 +7,7 @@ param (
     [Parameter(Position = 0, HelpMessage = "Target directory path where files will be consolidated.")]
     [ValidateScript({
         if ([string]::IsNullOrWhiteSpace($_)) { return $true }
-        if (Test-Path -Path $_ -PathType Container) {
+        if (Test-Path -LiteralPath $_ -PathType Container) {
             return $true
         } else {
             throw "Directory '$_' does not exist."
@@ -124,7 +124,7 @@ function Get-TargetDirectory {
             continue
         }
         
-        if (Test-Path -Path $path -PathType Container) {
+        if (Test-Path -LiteralPath $path -PathType Container) {
             Write-Log "Target directory selected: $path" -Level INFO
             return $path
         } else {
@@ -149,11 +149,11 @@ function Get-DirectoryAnalysis {
     Write-Log "Starting directory analysis: $Path" -Level INFO
     
     # Single call to Get-ChildItem for better performance
-    $allItems = Get-ChildItem -Path $Path -Recurse -Force -ErrorAction SilentlyContinue
+    $allItems = Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
     
     $subdirs = $allItems | Where-Object { $_.PSIsContainer }
     $allFiles = $allItems | Where-Object { -not $_.PSIsContainer }
-    $rootFiles = Get-ChildItem -Path $Path -File -Force -ErrorAction SilentlyContinue
+    $rootFiles = Get-ChildItem -LiteralPath $Path -File -Force -ErrorAction SilentlyContinue
     $subdirFiles = $allFiles | Where-Object { $_.DirectoryName -ne $Path }
     
     $fileTypes = $subdirFiles | Group-Object Extension | Sort-Object Count -Descending
@@ -233,7 +233,7 @@ function Resolve-FileConflict {
         [string]$ConflictStrategy
     )
     
-    if (-not (Test-Path -Path $DestinationPath)) {
+    if (-not (Test-Path -LiteralPath $DestinationPath)) {
         return @{
             Action = 'Move'
             Destination = $DestinationPath
@@ -280,7 +280,7 @@ function Resolve-FileConflict {
                 $newName = "${baseName}_${counter}${extension}"
                 $newPath = Join-Path -Path $directory -ChildPath $newName
                 $counter++
-            } while (Test-Path -Path $newPath)
+            } while (Test-Path -LiteralPath $newPath)
             
             Write-Verbose "Renaming to: $newName"
             Write-Log "Conflict resolved by renaming: $fileName -> $newName" -Level INFO
@@ -378,10 +378,10 @@ function Move-FilesToRoot {
             
             # Move file with appropriate action
             if ($resolution.Action -eq 'Overwrite') {
-                Move-Item -Path $file.FullName -Destination $resolution.Destination -Force -ErrorAction Stop
+                Move-Item -LiteralPath $file.FullName -Destination $resolution.Destination -Force -ErrorAction Stop
                 Write-Log "Moved (overwrite): $($file.FullName) -> $($resolution.Destination)" -Level INFO
             } else {
-                Move-Item -Path $file.FullName -Destination $resolution.Destination -ErrorAction Stop
+                Move-Item -LiteralPath $file.FullName -Destination $resolution.Destination -ErrorAction Stop
                 Write-Log "Moved: $($file.FullName) -> $($resolution.Destination)" -Level SUCCESS
             }
             
@@ -437,7 +437,7 @@ function Remove-EmptyDirectories {
     $deletedCount = 0
     
     # Get all subdirectories, sorted by depth (deepest first)
-    $subdirs = Get-ChildItem -Path $Path -Directory -Recurse -Force -ErrorAction SilentlyContinue | 
+    $subdirs = Get-ChildItem -LiteralPath $Path -Directory -Recurse -Force -ErrorAction SilentlyContinue | 
                Sort-Object { $_.FullName.Split([System.IO.Path]::DirectorySeparatorChar).Count } -Descending
     
     $totalDirs = $subdirs.Count
@@ -453,10 +453,10 @@ function Remove-EmptyDirectories {
                 Write-Progress -Activity "Cleaning Empty Directories" -Status "Processing directory $currentDir of $totalDirs" -CurrentOperation $dir.Name -PercentComplete $percentComplete
             }
             
-            $items = Get-ChildItem -Path $dir.FullName -Force -ErrorAction SilentlyContinue
+            $items = Get-ChildItem -LiteralPath $dir.FullName -Force -ErrorAction SilentlyContinue
             
             if ($items.Count -eq 0) {
-                Remove-Item -Path $dir.FullName -Force -ErrorAction Stop
+                Remove-Item -LiteralPath $dir.FullName -Force -ErrorAction Stop
                 Write-Verbose "Deleted empty directory: $($dir.Name)"
                 Write-Log "Deleted empty directory: $($dir.FullName)" -Level INFO
                 $deletedCount++
