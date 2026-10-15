@@ -145,7 +145,7 @@ Computer: $env:COMPUTERNAME
     }
 }
 
-function Write-Log {
+function Write-LogEntry {
     param (
         [string]$Message,
         [ValidateSet('INFO', 'WARNING', 'ERROR', 'SUCCESS', 'DEBUG')]
@@ -159,14 +159,15 @@ function Write-Log {
         $logEntry = "[$timestamp] [$Level] $Message"
         $logEntry | Out-File -LiteralPath $script:LogFile -Append -Encoding UTF8
     } catch {
-        # Silently fail if logging doesn't work
+        # A failed log write must not stop the move; -Verbose shows it.
+        Write-Verbose "Could not write to the log: $($_.Exception.Message)"
     }
 }
 
 # Welcome: the banner greets an interactive run; a run with -Path, often from a scheduled task or
 # another script, prints one line instead.
 function Show-Welcome {
-    Write-Log "Script started" -Level INFO
+    Write-LogEntry "Script started" -Level INFO
     if (-not [string]::IsNullOrWhiteSpace($Path)) {
         Write-Host "File Consolidation Tool" -ForegroundColor Green
         Write-Host ""
@@ -199,19 +200,19 @@ function Get-TargetDirectory {
 
         if ([string]::IsNullOrWhiteSpace($path)) {
             Write-Warning "Path cannot be empty!"
-            Write-Log "User entered empty path" -Level WARNING
+            Write-LogEntry "User entered empty path" -Level WARNING
             continue
         }
 
         if (Test-Path -LiteralPath $path -PathType Container) {
-            Write-Log "Target directory selected: $path" -Level INFO
+            Write-LogEntry "Target directory selected: $path" -Level INFO
             return $path
         } else {
             Write-Warning "Directory does not exist!"
-            Write-Log "Invalid directory path: $path" -Level WARNING
+            Write-LogEntry "Invalid directory path: $path" -Level WARNING
             $retry = Read-Host "Try again? (Y/N)"
             if ($retry -ne 'Y' -and $retry -ne 'y') {
-                Write-Log "User cancelled directory selection" -Level INFO
+                Write-LogEntry "User cancelled directory selection" -Level INFO
                 Write-Host "Operation cancelled."
                 exit 0
             }
@@ -262,7 +263,7 @@ function Get-FolderContent {
         $items = Get-ChildItem -LiteralPath $folder.FullName -Force -ErrorAction SilentlyContinue -ErrorVariable readErrors
         foreach ($readError in $readErrors) {
             Write-Warning "Could not read '$($folder.FullName)': $($readError.Exception.Message)"
-            Write-Log "Could not read '$($folder.FullName)': $($readError.Exception.Message)" -Level WARNING
+            Write-LogEntry "Could not read '$($folder.FullName)': $($readError.Exception.Message)" -Level WARNING
         }
 
         foreach ($item in $items) {
@@ -326,7 +327,7 @@ function Get-DirectoryAnalysis {
     )
 
     Write-Verbose "Analyzing directory structure at: $Path"
-    Write-Log "Starting directory analysis: $Path" -Level INFO
+    Write-LogEntry "Starting directory analysis: $Path" -Level INFO
 
     $content = Get-FolderContent -Path $Path -IncludeHidden $IncludeHidden
 
@@ -348,7 +349,7 @@ function Get-DirectoryAnalysis {
     }
 
     Write-Verbose "Analysis complete: $($analysis.SubdirectoryFiles) files in subdirectories"
-    Write-Log "Analysis complete - Subdirs: $($analysis.TotalSubdirectories), Files: $($analysis.TotalFiles), Subdir Files: $($analysis.SubdirectoryFiles), Hidden left out: $($analysis.HiddenLeftOut), Links left out: $($analysis.LinksLeftOut)" -Level INFO
+    Write-LogEntry "Analysis complete - Subdirs: $($analysis.TotalSubdirectories), Files: $($analysis.TotalFiles), Subdir Files: $($analysis.SubdirectoryFiles), Hidden left out: $($analysis.HiddenLeftOut), Links left out: $($analysis.LinksLeftOut)" -Level INFO
 
     return $analysis
 }
@@ -385,9 +386,6 @@ function Show-Analysis {
 
 # Function to get file type filter from user (interactive mode)
 function Get-FileTypeFilter {
-    param (
-        [hashtable]$Analysis
-    )
 
     Write-Host "File Type Selection:" -ForegroundColor Yellow
     Write-Host "1. Move ALL file types (default)" -ForegroundColor White
@@ -402,12 +400,12 @@ function Get-FileTypeFilter {
         $extensions = ConvertTo-ExtensionList -Value $answer
 
         if ($extensions.Count -gt 0) {
-            Write-Log "User selected extension filter: $($extensions -join ', ')" -Level INFO
+            Write-LogEntry "User selected extension filter: $($extensions -join ', ')" -Level INFO
             return $extensions
         }
     }
 
-    Write-Log "User selected to move all file types" -Level INFO
+    Write-LogEntry "User selected to move all file types" -Level INFO
     return @()
 }
 
@@ -455,7 +453,7 @@ function Resolve-FileConflict {
     }
 
     $fileName = [System.IO.Path]::GetFileName($SourcePath)
-    Write-Log "File conflict detected: $fileName" -Level WARNING
+    Write-LogEntry "File conflict detected: $fileName" -Level WARNING
 
     # If strategy is Ask, prompt user for first conflict
     if ($ConflictStrategy -eq 'Ask') {
@@ -473,12 +471,12 @@ function Resolve-FileConflict {
         } while ($choice -notin @('R', 'O', 'S', 'A', 'W', 'N'))
 
         switch ($choice) {
-            'A' { $script:GlobalConflictAction = 'Rename'; $ConflictStrategy = 'Rename'; Write-Log "User chose: Rename all conflicts" -Level INFO }
-            'W' { $script:GlobalConflictAction = 'Overwrite'; $ConflictStrategy = 'Overwrite'; Write-Log "User chose: Overwrite all conflicts" -Level INFO }
-            'N' { $script:GlobalConflictAction = 'Skip'; $ConflictStrategy = 'Skip'; Write-Log "User chose: Skip all conflicts" -Level INFO }
-            'R' { $ConflictStrategy = 'Rename'; Write-Log "User chose: Rename this file" -Level INFO }
-            'O' { $ConflictStrategy = 'Overwrite'; Write-Log "User chose: Overwrite this file" -Level INFO }
-            'S' { $ConflictStrategy = 'Skip'; Write-Log "User chose: Skip this file" -Level INFO }
+            'A' { $script:GlobalConflictAction = 'Rename'; $ConflictStrategy = 'Rename'; Write-LogEntry "User chose: Rename all conflicts" -Level INFO }
+            'W' { $script:GlobalConflictAction = 'Overwrite'; $ConflictStrategy = 'Overwrite'; Write-LogEntry "User chose: Overwrite all conflicts" -Level INFO }
+            'N' { $script:GlobalConflictAction = 'Skip'; $ConflictStrategy = 'Skip'; Write-LogEntry "User chose: Skip all conflicts" -Level INFO }
+            'R' { $ConflictStrategy = 'Rename'; Write-LogEntry "User chose: Rename this file" -Level INFO }
+            'O' { $ConflictStrategy = 'Overwrite'; Write-LogEntry "User chose: Overwrite this file" -Level INFO }
+            'S' { $ConflictStrategy = 'Skip'; Write-LogEntry "User chose: Skip this file" -Level INFO }
         }
     }
 
@@ -497,7 +495,7 @@ function Resolve-FileConflict {
             } while (Test-DestinationTaken -Path $newPath)
 
             Write-Verbose "Renaming to: $newName"
-            Write-Log "Conflict resolved by renaming: $fileName -> $newName" -Level INFO
+            Write-LogEntry "Conflict resolved by renaming: $fileName -> $newName" -Level INFO
             return @{
                 Action = 'Move'
                 Destination = $newPath
@@ -505,7 +503,7 @@ function Resolve-FileConflict {
         }
         'Overwrite' {
             Write-Verbose "Overwriting existing file"
-            Write-Log "Conflict resolved by overwriting: $fileName" -Level WARNING
+            Write-LogEntry "Conflict resolved by overwriting: $fileName" -Level WARNING
             return @{
                 Action = 'Overwrite'
                 Destination = $DestinationPath
@@ -513,7 +511,7 @@ function Resolve-FileConflict {
         }
         'Skip' {
             Write-Verbose "Skipping file"
-            Write-Log "Conflict resolved by skipping: $fileName" -Level INFO
+            Write-LogEntry "Conflict resolved by skipping: $fileName" -Level INFO
             return @{
                 Action = 'Skip'
                 Destination = $null
@@ -524,6 +522,7 @@ function Resolve-FileConflict {
 
 # Function to move files safely
 function Move-FilesToRoot {
+    [CmdletBinding(SupportsShouldProcess = $true)]
     param (
         [string]$RootPath,
         [array]$Files,
@@ -536,7 +535,7 @@ function Move-FilesToRoot {
     $errorCount = 0
 
     Write-Verbose "Starting file move operation with $($Files.Count) files"
-    Write-Log "Starting file move operation - Total files to process: $($Files.Count)" -Level INFO
+    Write-LogEntry "Starting file move operation - Total files to process: $($Files.Count)" -Level INFO
     Write-Host "`nStarting file move operation..."
     Write-Host "================================================"
 
@@ -552,11 +551,11 @@ function Move-FilesToRoot {
     }
 
     $totalFiles = $filesToMove.Count
-    Write-Log "Files matching filter: $totalFiles" -Level INFO
+    Write-LogEntry "Files matching filter: $totalFiles" -Level INFO
 
     if ($totalFiles -eq 0) {
         Write-Warning "No files match the specified filter."
-        Write-Log "No files to move after applying filter" -Level WARNING
+        Write-LogEntry "No files to move after applying filter" -Level WARNING
         return @{
             Moved = 0
             Skipped = 0
@@ -587,7 +586,7 @@ function Move-FilesToRoot {
 
             if ($resolution.Action -eq 'Skip') {
                 $skippedCount++
-                Write-Log "Skipped: $($file.Name)" -Level INFO
+                Write-LogEntry "Skipped: $($file.Name)" -Level INFO
                 continue
             }
 
@@ -598,7 +597,7 @@ function Move-FilesToRoot {
                     $movedCount++
                 } else {
                     $skippedCount++
-                    Write-Log "Skipped at the user's request: $($file.Name)" -Level INFO
+                    Write-LogEntry "Skipped at the user's request: $($file.Name)" -Level INFO
                 }
                 continue
             }
@@ -606,10 +605,10 @@ function Move-FilesToRoot {
             # Move file with appropriate action
             if ($resolution.Action -eq 'Overwrite') {
                 Move-Item -LiteralPath $file.FullName -Destination $resolution.Destination -Force -ErrorAction Stop
-                Write-Log "Moved (overwrite): $($file.FullName) -> $($resolution.Destination)" -Level INFO
+                Write-LogEntry "Moved (overwrite): $($file.FullName) -> $($resolution.Destination)" -Level INFO
             } else {
                 Move-Item -LiteralPath $file.FullName -Destination $resolution.Destination -ErrorAction Stop
-                Write-Log "Moved: $($file.FullName) -> $($resolution.Destination)" -Level SUCCESS
+                Write-LogEntry "Moved: $($file.FullName) -> $($resolution.Destination)" -Level SUCCESS
             }
 
             [void]$script:PlannedDestinations.Add($resolution.Destination)
@@ -617,7 +616,7 @@ function Move-FilesToRoot {
 
         } catch {
             Write-Error "Error moving file '$($file.Name)': $($_.Exception.Message)"
-            Write-Log "ERROR moving file '$($file.Name)': $($_.Exception.Message)" -Level ERROR
+            Write-LogEntry "ERROR moving file '$($file.Name)': $($_.Exception.Message)" -Level ERROR
             $errorCount++
         }
     }
@@ -637,7 +636,7 @@ function Move-FilesToRoot {
     Write-Host "Failed:  $errorCount" -ForegroundColor $(if ($errorCount -gt 0) { 'Red' } else { 'Gray' })
     Write-Host "================================================`n"
 
-    Write-Log "Move operation completed - Moved: $movedCount, Skipped: $skippedCount, Errors: $errorCount" -Level SUCCESS
+    Write-LogEntry "Move operation completed - Moved: $movedCount, Skipped: $skippedCount, Errors: $errorCount" -Level SUCCESS
 
     return @{
         Moved = $movedCount
@@ -647,7 +646,8 @@ function Move-FilesToRoot {
 }
 
 # Function to remove empty directories
-function Remove-EmptyDirectories {
+function Remove-EmptyFolder {
+    [CmdletBinding(SupportsShouldProcess = $true)]
     param (
         [string]$Path,
         [bool]$AutoRemove = $false,
@@ -655,16 +655,16 @@ function Remove-EmptyDirectories {
     )
 
     Write-Verbose "Checking for empty subdirectories"
-    Write-Log "Checking for empty subdirectories" -Level INFO
+    Write-LogEntry "Checking for empty subdirectories" -Level INFO
 
     if (-not $AutoRemove) {
         $choice = Read-Host "Do you want to delete empty subdirectories? (Y/N)"
         if ($choice -ne 'Y' -and $choice -ne 'y') {
             Write-Verbose "User declined to remove empty directories"
-            Write-Log "User declined to remove empty directories" -Level INFO
+            Write-LogEntry "User declined to remove empty directories" -Level INFO
             return
         }
-        Write-Log "User confirmed removal of empty directories" -Level INFO
+        Write-LogEntry "User confirmed removal of empty directories" -Level INFO
     }
 
     $deletedCount = 0
@@ -691,15 +691,15 @@ function Remove-EmptyDirectories {
             # empty folder, so a folder that could not be read is never deleted with its contents.
             $items = Get-ChildItem -LiteralPath $dir.FullName -Force -ErrorAction Stop
 
-            if ($items.Count -eq 0) {
+            if ($items.Count -eq 0 -and $PSCmdlet.ShouldProcess($dir.FullName, "Delete empty folder")) {
                 $dir.Delete()
                 Write-Verbose "Deleted empty directory: $($dir.Name)"
-                Write-Log "Deleted empty directory: $($dir.FullName)" -Level INFO
+                Write-LogEntry "Deleted empty directory: $($dir.FullName)" -Level INFO
                 $deletedCount++
             }
         } catch {
             Write-Error "Error deleting directory '$($dir.Name)': $($_.Exception.Message)"
-            Write-Log "ERROR deleting directory '$($dir.Name)': $($_.Exception.Message)" -Level ERROR
+            Write-LogEntry "ERROR deleting directory '$($dir.Name)': $($_.Exception.Message)" -Level ERROR
         }
     }
 
@@ -707,7 +707,7 @@ function Remove-EmptyDirectories {
     Write-Progress -Activity "Cleaning Empty Directories" -Completed
 
     Write-Host "Total empty directories deleted: $deletedCount"
-    Write-Log "Empty directories removed: $deletedCount" -Level SUCCESS
+    Write-LogEntry "Empty directories removed: $deletedCount" -Level SUCCESS
 }
 
 # Main script execution
@@ -729,7 +729,7 @@ try {
     } else {
         $targetPath = $Path
         Write-Verbose "Using provided path: $targetPath"
-        Write-Log "Using provided path: $targetPath" -Level INFO
+        Write-LogEntry "Using provided path: $targetPath" -Level INFO
     }
     $targetPath = Resolve-TargetPath -Path $targetPath
     if (Test-ProtectedFolder -Path $targetPath) {
@@ -745,7 +745,7 @@ try {
     # Check if there are files to move
     if ($analysis.SubdirectoryFiles -eq 0) {
         Write-Warning "No files found in subdirectories. Nothing to move."
-        Write-Log "No files found in subdirectories" -Level WARNING
+        Write-LogEntry "No files found in subdirectories" -Level WARNING
         exit 0
     }
 
@@ -756,21 +756,21 @@ try {
     }
     if ($extensions.Count -gt 0) {
         Write-Verbose "Using extension filter: $($extensions -join ', ')"
-        Write-Log "Using extension filter: $($extensions -join ', ')" -Level INFO
+        Write-LogEntry "Using extension filter: $($extensions -join ', ')" -Level INFO
     } elseif ([string]::IsNullOrWhiteSpace($Path)) {
         # Interactive mode
-        $extensions = Get-FileTypeFilter -Analysis $analysis
+        $extensions = Get-FileTypeFilter
     } else {
         # Automated mode - use all files
         Write-Verbose "No extension filter specified, processing all file types"
-        Write-Log "No extension filter specified, processing all file types" -Level INFO
+        Write-LogEntry "No extension filter specified, processing all file types" -Level INFO
     }
 
     # Ask before moving anything. ShouldProcess alone asks only when -Confirm is given, and
     # ShouldContinue takes Enter as Yes, so the question is a choice whose default is No. -Force
     # skips it, and -WhatIf needs no answer: it changes nothing and lists each move instead.
     if ($WhatIfPreference) {
-        Write-Log "WhatIf: listing the moves without making them" -Level INFO
+        Write-LogEntry "WhatIf: listing the moves without making them" -Level INFO
     } elseif (-not $Force) {
         $question = "Move the files in the subfolders of '$targetPath' into that folder?"
         $choices = [System.Management.Automation.Host.ChoiceDescription[]]@(
@@ -778,14 +778,14 @@ try {
             (New-Object System.Management.Automation.Host.ChoiceDescription '&No', 'Change nothing.')
         )
         if ($Host.UI.PromptForChoice('Confirm', $question, $choices, 1) -eq 0) {
-            Write-Log "User confirmed operation" -Level INFO
+            Write-LogEntry "User confirmed operation" -Level INFO
         } else {
             Write-Host "Operation cancelled."
-            Write-Log "Operation cancelled by user" -Level INFO
+            Write-LogEntry "Operation cancelled by user" -Level INFO
             exit 0
         }
     } else {
-        Write-Log "Operation forced by -Force parameter" -Level INFO
+        Write-LogEntry "Operation forced by -Force parameter" -Level INFO
     }
 
     # Move files
@@ -796,9 +796,9 @@ try {
     # nothing, so it has nothing to clean up.
     if ($result.Moved -gt 0 -and -not $WhatIfPreference) {
         if ($RemoveEmptyDirectories) {
-            Remove-EmptyDirectories -Path $targetPath -AutoRemove $true -IncludeHidden $IncludeHidden.IsPresent
+            Remove-EmptyFolder -Path $targetPath -AutoRemove $true -IncludeHidden $IncludeHidden.IsPresent
         } elseif ([string]::IsNullOrWhiteSpace($Path)) {
-            Remove-EmptyDirectories -Path $targetPath -AutoRemove $false -IncludeHidden $IncludeHidden.IsPresent
+            Remove-EmptyFolder -Path $targetPath -AutoRemove $false -IncludeHidden $IncludeHidden.IsPresent
         }
     }
 
@@ -815,17 +815,17 @@ try {
     # Write final summary to log
     $endTime = Get-Date
     $duration = $endTime - $script:ScriptStartTime
-    Write-Log "==================== OPERATION SUMMARY ====================" -Level INFO
-    Write-Log "Files moved: $($result.Moved)" -Level INFO
-    Write-Log "Files skipped: $($result.Skipped)" -Level INFO
-    Write-Log "Errors: $($result.Errors)" -Level INFO
-    Write-Log "Duration: $($duration.ToString('hh\:mm\:ss'))" -Level INFO
-    Write-Log "End Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -Level INFO
-    Write-Log "==========================================================" -Level INFO
+    Write-LogEntry "==================== OPERATION SUMMARY ====================" -Level INFO
+    Write-LogEntry "Files moved: $($result.Moved)" -Level INFO
+    Write-LogEntry "Files skipped: $($result.Skipped)" -Level INFO
+    Write-LogEntry "Errors: $($result.Errors)" -Level INFO
+    Write-LogEntry "Duration: $($duration.ToString('hh\:mm\:ss'))" -Level INFO
+    Write-LogEntry "End Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -Level INFO
+    Write-LogEntry "==========================================================" -Level INFO
     if ($script:ExitCode -eq 0) {
-        Write-Log "Script completed successfully" -Level SUCCESS
+        Write-LogEntry "Script completed successfully" -Level SUCCESS
     } else {
-        Write-Log "Script completed with errors" -Level ERROR
+        Write-LogEntry "Script completed with errors" -Level ERROR
     }
 
     if ($null -ne $script:LogFile) {
@@ -835,8 +835,8 @@ try {
 } catch {
     $PSCmdlet.WriteError($_)
     Write-Verbose $_.ScriptStackTrace
-    Write-Log "FATAL ERROR: $($_.Exception.Message)" -Level ERROR
-    Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level ERROR
+    Write-LogEntry "FATAL ERROR: $($_.Exception.Message)" -Level ERROR
+    Write-LogEntry "Stack Trace: $($_.ScriptStackTrace)" -Level ERROR
     exit 1
 } finally {
     if ([string]::IsNullOrWhiteSpace($Path)) {

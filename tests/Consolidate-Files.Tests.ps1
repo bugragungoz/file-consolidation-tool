@@ -23,6 +23,8 @@ BeforeAll {
 
     # Makes files (with their name as content) under a new folder and returns the folder's path.
     function New-Tree {
+        [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
+            Justification = 'A test helper that only writes under TestDrive.')]
         param([string]$Name, [string[]]$Files)
         $root = Join-Path $TestDrive $Name
         foreach ($file in $Files) {
