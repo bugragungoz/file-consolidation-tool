@@ -37,6 +37,8 @@ param (
 
 # Initialize logging
 $script:LogFile = $null
+# The script's own file: it is never moved, even when it sits in a subfolder of the target.
+$script:ScriptFile = $MyInvocation.MyCommand.Path
 $script:ScriptStartTime = Get-Date
 
 function Initialize-Logging {
@@ -46,9 +48,6 @@ function Initialize-Logging {
     }
     
     $scriptPath = $PSScriptRoot
-    if ([string]::IsNullOrWhiteSpace($scriptPath)) {
-        $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-    }
     if ([string]::IsNullOrWhiteSpace($scriptPath)) {
         $scriptPath = Get-Location
     }
@@ -223,7 +222,10 @@ function Get-DirectoryAnalysis {
     Write-Log "Starting directory analysis: $Path" -Level INFO
     
     $content = Get-FolderContent -Path $Path -IncludeHidden $IncludeHidden
-    $subdirFiles = @($content.SubdirFiles)
+
+    # The script and its log are never moved, even when they sit in a subfolder.
+    $ownFiles = @($script:ScriptFile, $script:LogFile) | Where-Object { $_ }
+    $subdirFiles = @($content.SubdirFiles | Where-Object { $ownFiles -notcontains $_.FullName })
     
     $fileTypes = $subdirFiles | Group-Object Extension | Sort-Object Count -Descending
     

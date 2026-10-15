@@ -92,16 +92,20 @@ Describe 'Consolidate-Files.ps1' {
             Get-RelativeFile $root | Should -Be @('keep.txt', 'moved.txt')
         }
 
-        It 'never moves the script itself' {
+        It 'never moves the script itself or its log' {
             $root = New-Tree 'self' 'a/data.txt'
             $copy = Join-Path $root 'tools/Consolidate-Files.ps1'
             New-Item -ItemType Directory -Path (Split-Path -Parent $copy) | Out-Null
             Copy-Item -LiteralPath $script:ScriptPath -Destination $copy
 
-            $output = & $script:Shell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $copy -Path $root -Force -NoLog -ConflictAction Rename 2>&1
+            $output = & $script:Shell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $copy -Path $root -Force -ConflictAction Rename 2>&1
 
             $LASTEXITCODE | Should -Be 0 -Because ($output | Out-String)
-            Get-RelativeFile $root | Should -Be @('data.txt', 'tools/Consolidate-Files.ps1')
+            $files = Get-RelativeFile $root
+            $files | Should -HaveCount 3
+            $files[0] | Should -Be 'data.txt'
+            $files[1] | Should -Be 'tools/Consolidate-Files.ps1'
+            $files[2] | Should -Match '^tools/FileConsolidation_\d{8}_\d{6}\.log$'
         }
     }
 
