@@ -323,8 +323,8 @@ function Move-FilesToRoot {
     
     Write-Verbose "Starting file move operation with $($Files.Count) files"
     Write-Log "Starting file move operation - Total files to process: $($Files.Count)" -Level INFO
-    Write-Output "`nStarting file move operation..."
-    Write-Output "================================================"
+    Write-Host "`nStarting file move operation..."
+    Write-Host "================================================"
     
     # Initialize global conflict action if using Ask strategy
     $script:GlobalConflictAction = $null
@@ -397,15 +397,13 @@ function Move-FilesToRoot {
     # Clear progress bar
     Write-Progress -Activity "File Consolidation" -Completed
     
-    Write-Output "================================================"
-    Write-Output "Files moved successfully: $movedCount"
-    Write-Output "Files skipped: $skippedCount"
-    if ($errorCount -gt 0) {
-        Write-Warning "Files with errors: $errorCount"
-    } else {
-        Write-Output "Files with errors: 0"
-    }
-    Write-Output "================================================`n"
+    # Write-Host, not Write-Output: this function returns its counts, and anything written to the
+    # output would be captured with them instead of reaching the screen.
+    Write-Host "================================================"
+    Write-Host "Moved:   $movedCount" -ForegroundColor Green
+    Write-Host "Skipped: $skippedCount"
+    Write-Host "Failed:  $errorCount" -ForegroundColor $(if ($errorCount -gt 0) { 'Red' } else { 'Gray' })
+    Write-Host "================================================`n"
     
     Write-Log "Move operation completed - Moved: $movedCount, Skipped: $skippedCount, Errors: $errorCount" -Level SUCCESS
     
