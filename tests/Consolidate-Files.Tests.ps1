@@ -177,6 +177,15 @@ Describe 'Consolidate-Files.ps1' {
             Get-RelativeFile $root | Should -Be @('a/five.log', 'four.pdf', 'one.txt', 'three.md', 'two.TXT')
         }
 
+        It 'stops instead of moving every file when -ExtensionFilter holds no extension' {
+            $root = New-Tree 'nofilter' 'a/one.txt'
+
+            $run = Invoke-Consolidation '-Path', $root, '-Force', '-NoLog', '-ConflictAction', 'Rename', '-ExtensionFilter', ' , '
+
+            $run.ExitCode | Should -Be 1
+            Get-RelativeFile $root | Should -Be @('a/one.txt')
+        }
+
         It 'leaves hidden files where they are unless -IncludeHidden is given' {
             $root = New-Tree 'hidden' 'a/.secret', 'a/visible.txt'
             if ($script:OnWindows) {

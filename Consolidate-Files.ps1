@@ -15,7 +15,7 @@ param (
     })]
     [string]$Path,
 
-    [Parameter(HelpMessage = "File extensions to move (e.g., '.txt','.pdf'). Leave empty for all files.")]
+    [Parameter(HelpMessage = "File extensions to move, such as txt or .pdf. Leave empty for all files.")]
     [string[]]$ExtensionFilter,
 
     [Parameter(HelpMessage = "Remove empty directories after moving files.")]
@@ -226,12 +226,12 @@ function Get-FileTypeFilter {
     $choice = Read-Host "`nEnter your choice (1 or 2)"
     
     if ($choice -eq '2') {
-        Write-Host "`nEnter file extensions to move (comma-separated, e.g., .txt,.pdf,.jpg)" -ForegroundColor Yellow
+        Write-Host "`nEnter file extensions to move (comma-separated, e.g., txt, pdf, jpg)" -ForegroundColor Yellow
         Write-Host "Or press Enter to move all types" -ForegroundColor Gray
-        $input = Read-Host "Extensions"
+        $answer = Read-Host "Extensions"
+        $extensions = ConvertTo-ExtensionList -Value $answer
         
-        if (-not [string]::IsNullOrWhiteSpace($input)) {
-            $extensions = $input -split ',' | ForEach-Object { $_.Trim().ToLower() }
+        if ($extensions.Count -gt 0) {
             Write-Log "User selected extension filter: $($extensions -join ', ')" -Level INFO
             return $extensions
         }
@@ -239,6 +239,23 @@ function Get-FileTypeFilter {
     
     Write-Log "User selected to move all file types" -Level INFO
     return @()
+}
+
+# Function to turn extensions written as "txt", ".txt" or "*.txt", alone or comma-separated, into
+# ".txt". Through -File an array parameter arrives as one string, so commas are split here too.
+function ConvertTo-ExtensionList {
+    param (
+        [string[]]$Value
+    )
+
+    [string[]]$extensions = @(
+        $Value -split ',' |
+            ForEach-Object { $_.Trim().TrimStart('*').TrimStart('.').ToLowerInvariant() } |
+            Where-Object { $_ -ne '' } |
+            ForEach-Object { ".$_" } |
+            Select-Object -Unique
+    )
+    return ,$extensions
 }
 
 # Function to tell whether a destination name is already used, on disk or by this run
@@ -556,20 +573,20 @@ try {
     }
     
     # Get file type filter (from parameter or user input)
-    if ($null -eq $ExtensionFilter -or $ExtensionFilter.Count -eq 0) {
-        if ([string]::IsNullOrWhiteSpace($Path)) {
-            # Interactive mode
-            $extensionFilter = Get-FileTypeFilter -Analysis $analysis
-        } else {
-            # Automated mode - use all files
-            $extensionFilter = @()
-            Write-Verbose "No extension filter specified, processing all file types"
-            Write-Log "No extension filter specified, processing all file types" -Level INFO
-        }
+    $extensions = ConvertTo-ExtensionList -Value $ExtensionFilter
+    if ($PSBoundParameters.ContainsKey('ExtensionFilter') -and $extensions.Count -eq 0) {
+        throw "-ExtensionFilter holds no extension. Give one such as txt or .pdf, or leave it out to move every file."
+    }
+    if ($extensions.Count -gt 0) {
+        Write-Verbose "Using extension filter: $($extensions -join ', ')"
+        Write-Log "Using extension filter: $($extensions -join ', ')" -Level INFO
+    } elseif ([string]::IsNullOrWhiteSpace($Path)) {
+        # Interactive mode
+        $extensions = Get-FileTypeFilter -Analysis $analysis
     } else {
-        $extensionFilter = $ExtensionFilter | ForEach-Object { $_.ToLower() }
-        Write-Verbose "Using extension filter: $($extensionFilter -join ', ')"
-        Write-Log "Using extension filter: $($extensionFilter -join ', ')" -Level INFO
+        # Automated mode - use all files
+        Write-Verbose "No extension filter specified, processing all file types"
+        Write-Log "No extension filter specified, processing all file types" -Level INFO
     }
     
     # Ask before moving anything. ShouldProcess alone asks only when -Confirm is given, so the
@@ -591,7 +608,7 @@ try {
     }
     
     # Move files
-    $result = Move-FilesToRoot -RootPath $targetPath -Files $analysis.SubdirFilesList -ExtensionFilter $extensionFilter -ConflictStrategy $ConflictAction
+    $result = Move-FilesToRoot -RootPath $targetPath -Files $analysis.SubdirFilesList -ExtensionFilter $extensions -ConflictStrategy $ConflictAction
     
     # Remove empty directories: with -RemoveEmptyDirectories, or when the user says so in
     # interactive mode. With a -Path the script runs unattended and never asks. A -WhatIf run moved
