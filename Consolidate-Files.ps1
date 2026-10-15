@@ -89,10 +89,10 @@ param (
     [Parameter(HelpMessage = "Remove empty directories after moving files.")]
     [switch]$RemoveEmptyDirectories,
 
-    [Parameter(HelpMessage = "Skip all confirmation prompts.")]
+    [Parameter(HelpMessage = "Move without asking for confirmation first.")]
     [switch]$Force,
 
-    [Parameter(HelpMessage = "Conflict resolution strategy: Rename, Overwrite, Skip")]
+    [Parameter(HelpMessage = "What to do when a name is taken: Rename, Overwrite, Skip or Ask.")]
     [ValidateSet('Rename', 'Overwrite', 'Skip', 'Ask')]
     [string]$ConflictAction = 'Ask',
 
