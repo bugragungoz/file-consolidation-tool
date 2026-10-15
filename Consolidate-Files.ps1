@@ -40,6 +40,7 @@ $script:LogFile = $null
 # The script's own file: it is never moved, even when it sits in a subfolder of the target.
 $script:ScriptFile = $MyInvocation.MyCommand.Path
 $script:ScriptStartTime = Get-Date
+$script:ExitCode = 0
 
 function Initialize-Logging {
     if ($NoLog) {
@@ -688,7 +689,14 @@ try {
         }
     }
     
-    Write-Output "`nOperation completed successfully!"
+    # A file that could not be moved makes the run fail, so a scheduled task or another script can
+    # tell; the files that were moved stay moved.
+    if ($result.Errors -gt 0) {
+        Write-Warning "$($result.Errors) file(s) could not be moved. The errors above say why."
+        $script:ExitCode = 1
+    } else {
+        Write-Host "`nDone."
+    }
     Write-Verbose "Summary: $($result.Moved) moved, $($result.Skipped) skipped, $($result.Errors) errors"
     
     # Write final summary to log
@@ -701,7 +709,11 @@ try {
     Write-Log "Duration: $($duration.ToString('hh\:mm\:ss'))" -Level INFO
     Write-Log "End Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -Level INFO
     Write-Log "==========================================================" -Level INFO
-    Write-Log "Script completed successfully" -Level SUCCESS
+    if ($script:ExitCode -eq 0) {
+        Write-Log "Script completed successfully" -Level SUCCESS
+    } else {
+        Write-Log "Script completed with errors" -Level ERROR
+    }
     
     if ($null -ne $script:LogFile) {
         Write-Host "`nDetailed log saved to: $script:LogFile" -ForegroundColor Green
@@ -720,3 +732,5 @@ try {
         $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     }
 }
+
+exit $script:ExitCode
