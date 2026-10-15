@@ -378,7 +378,8 @@ function Show-Analysis {
         Write-Host "`nFile types in subdirectories:"
         foreach ($type in $Analysis.FileTypes) {
             $ext = if ([string]::IsNullOrWhiteSpace($type.Name)) { "(no extension)" } else { $type.Name }
-            Write-Host "  $ext : $($type.Count) files"
+            $noun = if ($type.Count -eq 1) { 'file' } else { 'files' }
+            Write-Host "  $ext : $($type.Count) $noun"
         }
     }
     Write-Host "================================================`n"
