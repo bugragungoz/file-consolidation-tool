@@ -4,6 +4,11 @@
 # edition (Windows PowerShell 5.1 or PowerShell 7), on folders made under Pester's TestDrive.
 # A separate process captures everything the script prints, prompts included, and its exit code.
 
+BeforeDiscovery {
+    # -Skip is decided while Pester discovers the tests, before BeforeAll runs.
+    $OnWindows = [System.Environment]::OSVersion.Platform -eq 'Win32NT'
+}
+
 BeforeAll {
     $script:ScriptPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'Consolidate-Files.ps1'
     $script:Shell = (Get-Process -Id $PID).Path
@@ -12,6 +17,9 @@ BeforeAll {
     function Invoke-Consolidation {
         param([string[]]$Arguments, [string]$WorkingDirectory = $TestDrive)
         Push-Location -LiteralPath $WorkingDirectory
+        # Windows PowerShell turns each line a native program writes to stderr into an error, which
+        # Pester's 'Stop' preference would throw; the tests check the script's errors themselves.
+        $ErrorActionPreference = 'Continue'
         try {
             $output = & $script:Shell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script:ScriptPath @Arguments 2>&1
             [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output | Out-String) }
@@ -263,7 +271,7 @@ Describe 'Consolidate-Files.ps1' {
             Test-Path -LiteralPath (Join-Path $root 'emptylink') | Should -BeTrue
         }
 
-        It 'leaves system files such as desktop.ini where they are' -Skip:(-not $script:OnWindows) {
+        It 'leaves system files such as desktop.ini where they are' -Skip:(-not $OnWindows) {
             $root = New-Tree 'system' 'a/desktop.ini', 'a/visible.txt'
             $item = Get-Item -LiteralPath (Join-Path $root 'a/desktop.ini') -Force
             $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::System
@@ -277,6 +285,12 @@ Describe 'Consolidate-Files.ps1' {
     Context 'Cleaning up and reporting' {
         It '-RemoveEmptyDirectories removes the folders it emptied and keeps the others' {
             $root = New-Tree 'cleanup' 'a/b/one.txt', 'c/.keep'
+            # A hidden file stays and keeps its folder. Names starting with a dot are hidden only
+            # outside Windows.
+            if ($script:OnWindows) {
+                $item = Get-Item -LiteralPath (Join-Path $root 'c/.keep') -Force
+                $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::Hidden
+            }
 
             $run = Invoke-Consolidation '-Path', $root, '-Force', '-NoLog', '-ConflictAction', 'Rename', '-RemoveEmptyDirectories'
 
@@ -285,7 +299,7 @@ Describe 'Consolidate-Files.ps1' {
             Test-Path -LiteralPath (Join-Path $root 'c') | Should -BeTrue
         }
 
-        It 'exits with code 1 when a file could not be moved' -Skip:(-not $script:OnWindows) {
+        It 'exits with code 1 when a file could not be moved' -Skip:(-not $OnWindows) {
             $root = New-Tree 'locked' 'a/locked.txt', 'a/free.txt'
             $stream = [System.IO.File]::Open((Join-Path $root 'a/locked.txt'), 'Open', 'Read', 'None')
             try {
