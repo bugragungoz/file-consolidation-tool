@@ -546,9 +546,14 @@ try {
     # Move files
     $result = Move-FilesToRoot -RootPath $targetPath -Files $analysis.SubdirFilesList -ExtensionFilter $extensionFilter -ConflictStrategy $ConflictAction
     
-    # Remove empty directories
+    # Remove empty directories: with -RemoveEmptyDirectories, or when the user says so in
+    # interactive mode. With a -Path the script runs unattended and never asks.
     if ($result.Moved -gt 0) {
-        Remove-EmptyDirectories -Path $targetPath -AutoRemove:$RemoveEmptyDirectories
+        if ($RemoveEmptyDirectories) {
+            Remove-EmptyDirectories -Path $targetPath -AutoRemove $true
+        } elseif ([string]::IsNullOrWhiteSpace($Path)) {
+            Remove-EmptyDirectories -Path $targetPath -AutoRemove $false
+        }
     }
     
     Write-Output "`nOperation completed successfully!"
