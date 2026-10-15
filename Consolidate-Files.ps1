@@ -730,6 +730,12 @@ try {
         Write-Host ""
     }
 
+    # Check -ExtensionFilter before reading a folder that may hold thousands of files.
+    $extensions = ConvertTo-ExtensionList -Value $ExtensionFilter
+    if ($PSBoundParameters.ContainsKey('ExtensionFilter') -and $extensions.Count -eq 0) {
+        throw "-ExtensionFilter holds no extension. Give one such as txt or .pdf, or leave it out to move every file."
+    }
+
     # Get target directory (from parameter or user input)
     if ([string]::IsNullOrWhiteSpace($Path)) {
         $targetPath = Get-TargetDirectory
@@ -757,10 +763,6 @@ try {
     }
 
     # Get file type filter (from parameter or user input)
-    $extensions = ConvertTo-ExtensionList -Value $ExtensionFilter
-    if ($PSBoundParameters.ContainsKey('ExtensionFilter') -and $extensions.Count -eq 0) {
-        throw "-ExtensionFilter holds no extension. Give one such as txt or .pdf, or leave it out to move every file."
-    }
     if ($extensions.Count -gt 0) {
         Write-Verbose "Using extension filter: $($extensions -join ', ')"
         Write-LogEntry "Using extension filter: $($extensions -join ', ')" -Level INFO
@@ -847,9 +849,8 @@ try {
     exit 1
 } finally {
     if ([string]::IsNullOrWhiteSpace($Path)) {
-        # Interactive mode - wait for keypress
-        # Keeps the window of a "Run with PowerShell" start open. Hosts without a console to read
-        # from, such as the ISE or redirected input, cannot wait for a key.
+        # Interactive mode: keeps the window of a "Run with PowerShell" start open. Hosts without a
+        # console to read from, such as the ISE or redirected input, cannot wait for a key.
         try {
             Write-Host "`nPress any key to exit..." -ForegroundColor Gray
             $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
