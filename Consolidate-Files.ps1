@@ -241,6 +241,15 @@ function Get-FileTypeFilter {
     return @()
 }
 
+# Function to tell whether a destination name is already used, on disk or by this run
+function Test-DestinationTaken {
+    param (
+        [string]$Path
+    )
+
+    return (Test-Path -LiteralPath $Path) -or $script:PlannedDestinations.Contains($Path)
+}
+
 # Function to handle file conflicts
 function Resolve-FileConflict {
     param (
@@ -249,7 +258,9 @@ function Resolve-FileConflict {
         [string]$ConflictStrategy
     )
     
-    if (-not (Test-Path -LiteralPath $DestinationPath)) {
+    # A name is taken if a file has it, or if an earlier move of this run was given it: under -WhatIf
+    # nothing moves, and the preview must still number the second x.txt like the real run would.
+    if (-not (Test-DestinationTaken -Path $DestinationPath)) {
         return @{
             Action = 'Move'
             Destination = $DestinationPath
@@ -296,7 +307,7 @@ function Resolve-FileConflict {
                 $newName = "${baseName}_${counter}${extension}"
                 $newPath = Join-Path -Path $directory -ChildPath $newName
                 $counter++
-            } while (Test-Path -LiteralPath $newPath)
+            } while (Test-DestinationTaken -Path $newPath)
             
             Write-Verbose "Renaming to: $newName"
             Write-Log "Conflict resolved by renaming: $fileName -> $newName" -Level INFO
@@ -344,6 +355,7 @@ function Move-FilesToRoot {
     
     # Initialize global conflict action if using Ask strategy
     $script:GlobalConflictAction = $null
+    $script:PlannedDestinations = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
     
     # Filter files if extension filter is specified
     $filesToMove = if ($ExtensionFilter.Count -gt 0) {
@@ -391,6 +403,18 @@ function Move-FilesToRoot {
                 Write-Log "Skipped: $($file.Name)" -Level INFO
                 continue
             }
+
+            # -WhatIf prints this move and makes none; -Confirm asks about each file.
+            if (-not $PSCmdlet.ShouldProcess($file.FullName, "Move to $($resolution.Destination)")) {
+                if ($WhatIfPreference) {
+                    [void]$script:PlannedDestinations.Add($resolution.Destination)
+                    $movedCount++
+                } else {
+                    $skippedCount++
+                    Write-Log "Skipped at the user's request: $($file.Name)" -Level INFO
+                }
+                continue
+            }
             
             # Move file with appropriate action
             if ($resolution.Action -eq 'Overwrite') {
@@ -401,6 +425,7 @@ function Move-FilesToRoot {
                 Write-Log "Moved: $($file.FullName) -> $($resolution.Destination)" -Level SUCCESS
             }
             
+            [void]$script:PlannedDestinations.Add($resolution.Destination)
             $movedCount++
             
         } catch {
@@ -416,7 +441,11 @@ function Move-FilesToRoot {
     # Write-Host, not Write-Output: this function returns its counts, and anything written to the
     # output would be captured with them instead of reaching the screen.
     Write-Host "================================================"
-    Write-Host "Moved:   $movedCount" -ForegroundColor Green
+    if ($WhatIfPreference) {
+        Write-Host "Would move: $movedCount (nothing was changed)" -ForegroundColor Green
+    } else {
+        Write-Host "Moved:   $movedCount" -ForegroundColor Green
+    }
     Write-Host "Skipped: $skippedCount"
     Write-Host "Failed:  $errorCount" -ForegroundColor $(if ($errorCount -gt 0) { 'Red' } else { 'Gray' })
     Write-Host "================================================`n"
@@ -543,15 +572,18 @@ try {
         Write-Log "Using extension filter: $($extensionFilter -join ', ')" -Level INFO
     }
     
-    # Confirm operation (unless -Force is used)
-    if (-not $Force) {
-        Write-Warning "This operation will move files from subdirectories to the root directory."
-        
-        if ($PSCmdlet.ShouldProcess($targetPath, "Move files from subdirectories to root")) {
+    # Ask before moving anything. ShouldProcess alone asks only when -Confirm is given, so the
+    # question goes through ShouldContinue. -Force skips it, and -WhatIf needs no answer: it
+    # changes nothing and lists each move instead.
+    if ($WhatIfPreference) {
+        Write-Log "WhatIf: listing the moves without making them" -Level INFO
+    } elseif (-not $Force) {
+        $question = "Move the files in the subfolders of '$targetPath' into that folder?"
+        if ($PSCmdlet.ShouldContinue($question, "Confirm")) {
             Write-Log "User confirmed operation" -Level INFO
         } else {
-            Write-Output "Operation cancelled."
-            Write-Log "Operation cancelled by user via ShouldProcess" -Level INFO
+            Write-Host "Operation cancelled."
+            Write-Log "Operation cancelled by user" -Level INFO
             exit 0
         }
     } else {
@@ -562,8 +594,9 @@ try {
     $result = Move-FilesToRoot -RootPath $targetPath -Files $analysis.SubdirFilesList -ExtensionFilter $extensionFilter -ConflictStrategy $ConflictAction
     
     # Remove empty directories: with -RemoveEmptyDirectories, or when the user says so in
-    # interactive mode. With a -Path the script runs unattended and never asks.
-    if ($result.Moved -gt 0) {
+    # interactive mode. With a -Path the script runs unattended and never asks. A -WhatIf run moved
+    # nothing, so it has nothing to clean up.
+    if ($result.Moved -gt 0 -and -not $WhatIfPreference) {
         if ($RemoveEmptyDirectories) {
             Remove-EmptyDirectories -Path $targetPath -AutoRemove $true
         } elseif ([string]::IsNullOrWhiteSpace($Path)) {
