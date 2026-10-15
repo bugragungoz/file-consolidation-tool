@@ -137,7 +137,7 @@ Computer: $env:COMPUTERNAME
 ================================================================================
 
 "@
-        $header | Out-File -FilePath $script:LogFile -Encoding UTF8
+        $header | Out-File -LiteralPath $script:LogFile -Encoding UTF8
         Write-Verbose "Log file created: $script:LogFile"
     } catch {
         Write-Warning "Could not create log file: $($_.Exception.Message)"
@@ -157,7 +157,7 @@ function Write-Log {
     try {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
-        $logEntry | Out-File -FilePath $script:LogFile -Append -Encoding UTF8
+        $logEntry | Out-File -LiteralPath $script:LogFile -Append -Encoding UTF8
     } catch {
         # Silently fail if logging doesn't work
     }
