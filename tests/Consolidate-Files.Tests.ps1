@@ -200,6 +200,40 @@ Describe 'Consolidate-Files.ps1' {
             Get-RelativeFile $root | Should -Be @('.secret', 'visible.txt')
         }
 
+        It 'leaves hidden folders such as .git alone, also when removing empty folders' {
+            $root = New-Tree 'hiddenfolder' 'project/.git/HEAD', 'project/readme.md'
+            New-Item -ItemType Directory -Path (Join-Path $root 'project/.git/refs/tags') | Out-Null
+            if ($script:OnWindows) {
+                $item = Get-Item -LiteralPath (Join-Path $root 'project/.git') -Force
+                $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::Hidden
+            }
+
+            $run = Invoke-Consolidation '-Path', $root, '-Force', '-NoLog', '-ConflictAction', 'Rename', '-RemoveEmptyDirectories'
+
+            $run.ExitCode | Should -Be 0 -Because $run.Output
+            Get-RelativeFile $root | Should -Be @('project/.git/HEAD', 'readme.md')
+            Test-Path -LiteralPath (Join-Path $root 'project/.git/refs/tags') | Should -BeTrue
+        }
+
+        It 'does not enter linked folders, whose files live elsewhere' {
+            $outside = New-Tree 'linktarget' 'secret.txt'
+            $empty = Join-Path $TestDrive 'emptytarget'
+            New-Item -ItemType Directory -Path $empty | Out-Null
+            $root = New-Tree 'links' 'a/one.txt'
+            # A junction needs no administrator rights on Windows; elsewhere a symbolic link does the same.
+            $linkType = if ($script:OnWindows) { 'Junction' } else { 'SymbolicLink' }
+            New-Item -ItemType $linkType -Path (Join-Path $root 'link') -Value $outside | Out-Null
+            New-Item -ItemType $linkType -Path (Join-Path $root 'emptylink') -Value $empty | Out-Null
+
+            $run = Invoke-Consolidation '-Path', $root, '-Force', '-NoLog', '-ConflictAction', 'Rename', '-RemoveEmptyDirectories'
+
+            $run.ExitCode | Should -Be 0 -Because $run.Output
+            Test-Path -LiteralPath (Join-Path $outside 'secret.txt') | Should -BeTrue
+            Test-Path -LiteralPath (Join-Path $root 'secret.txt') | Should -BeFalse
+            Test-Path -LiteralPath (Join-Path $root 'one.txt') | Should -BeTrue
+            Test-Path -LiteralPath (Join-Path $root 'emptylink') | Should -BeTrue
+        }
+
         It 'leaves system files such as desktop.ini where they are' -Skip:(-not $script:OnWindows) {
             $root = New-Tree 'system' 'a/desktop.ini', 'a/visible.txt'
             $item = Get-Item -LiteralPath (Join-Path $root 'a/desktop.ini') -Force

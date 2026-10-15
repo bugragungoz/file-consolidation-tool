@@ -29,7 +29,10 @@ param (
     [string]$ConflictAction = 'Ask',
 
     [Parameter(HelpMessage = "Disable logging to file.")]
-    [switch]$NoLog
+    [switch]$NoLog,
+
+    [Parameter(HelpMessage = "Also move hidden and system files, and the files in hidden folders.")]
+    [switch]$IncludeHidden
 )
 
 # Initialize logging
@@ -155,36 +158,88 @@ function Resolve-TargetPath {
     return $fullPath
 }
 
-# Function to analyze directory structure (optimized)
+# Function to list the files under a folder, split into the ones directly in it and the ones in
+# its subfolders. Hidden and system files and folders are left out unless -IncludeHidden is given,
+# and linked folders (junctions and symbolic links) are never entered: their files live elsewhere.
+function Get-FolderContent {
+    param (
+        [string]$Path,
+        [bool]$IncludeHidden
+    )
+
+    $hiddenOrSystem = [System.IO.FileAttributes]::Hidden -bor [System.IO.FileAttributes]::System
+    $content = @{
+        Subdirectories = New-Object System.Collections.Generic.List[System.IO.DirectoryInfo]
+        RootFiles = New-Object System.Collections.Generic.List[System.IO.FileInfo]
+        SubdirFiles = New-Object System.Collections.Generic.List[System.IO.FileInfo]
+        HiddenLeftOut = 0
+        LinksLeftOut = 0
+    }
+
+    $rootFolder = Get-Item -LiteralPath $Path -Force
+    $pending = New-Object System.Collections.Generic.Stack[System.IO.DirectoryInfo]
+    $pending.Push($rootFolder)
+    while ($pending.Count -gt 0) {
+        $folder = $pending.Pop()
+        $isRoot = [object]::ReferenceEquals($folder, $rootFolder)
+        $items = Get-ChildItem -LiteralPath $folder.FullName -Force -ErrorAction SilentlyContinue -ErrorVariable readErrors
+        foreach ($readError in $readErrors) {
+            Write-Warning "Could not read '$($folder.FullName)': $($readError.Exception.Message)"
+            Write-Log "Could not read '$($folder.FullName)': $($readError.Exception.Message)" -Level WARNING
+        }
+
+        foreach ($item in $items) {
+            if (-not $IncludeHidden -and ($item.Attributes -band $hiddenOrSystem)) {
+                # Files of the folder itself stay where they are anyway.
+                if ($item.PSIsContainer -or -not $isRoot) { $content.HiddenLeftOut++ }
+                continue
+            }
+            if ($item.PSIsContainer) {
+                if ($item.LinkType -in @('Junction', 'SymbolicLink')) {
+                    Write-Verbose "Not entering linked folder: $($item.FullName)"
+                    $content.LinksLeftOut++
+                    continue
+                }
+                $content.Subdirectories.Add($item)
+                $pending.Push($item)
+            } elseif ($isRoot) {
+                $content.RootFiles.Add($item)
+            } else {
+                $content.SubdirFiles.Add($item)
+            }
+        }
+    }
+    return $content
+}
+
+# Function to analyze directory structure
 function Get-DirectoryAnalysis {
     param (
-        [string]$Path
+        [string]$Path,
+        [bool]$IncludeHidden
     )
     
     Write-Verbose "Analyzing directory structure at: $Path"
     Write-Log "Starting directory analysis: $Path" -Level INFO
     
-    # Single call to Get-ChildItem for better performance
-    $allItems = Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
-    
-    $subdirs = $allItems | Where-Object { $_.PSIsContainer }
-    $allFiles = $allItems | Where-Object { -not $_.PSIsContainer }
-    $rootFiles = Get-ChildItem -LiteralPath $Path -File -Force -ErrorAction SilentlyContinue
-    $subdirFiles = $allFiles | Where-Object { $_.DirectoryName -ne $Path }
+    $content = Get-FolderContent -Path $Path -IncludeHidden $IncludeHidden
+    $subdirFiles = @($content.SubdirFiles)
     
     $fileTypes = $subdirFiles | Group-Object Extension | Sort-Object Count -Descending
     
     $analysis = @{
-        TotalSubdirectories = $subdirs.Count
-        TotalFiles = $allFiles.Count
-        RootFiles = $rootFiles.Count
+        TotalSubdirectories = $content.Subdirectories.Count
+        TotalFiles = $content.RootFiles.Count + $content.SubdirFiles.Count
+        RootFiles = $content.RootFiles.Count
         SubdirectoryFiles = $subdirFiles.Count
+        HiddenLeftOut = $content.HiddenLeftOut
+        LinksLeftOut = $content.LinksLeftOut
         FileTypes = $fileTypes
         SubdirFilesList = $subdirFiles
     }
     
     Write-Verbose "Analysis complete: $($analysis.SubdirectoryFiles) files in subdirectories"
-    Write-Log "Analysis complete - Subdirs: $($analysis.TotalSubdirectories), Files: $($analysis.TotalFiles), Subdir Files: $($analysis.SubdirectoryFiles)" -Level INFO
+    Write-Log "Analysis complete - Subdirs: $($analysis.TotalSubdirectories), Files: $($analysis.TotalFiles), Subdir Files: $($analysis.SubdirectoryFiles), Hidden left out: $($analysis.HiddenLeftOut), Links left out: $($analysis.LinksLeftOut)" -Level INFO
     
     return $analysis
 }
@@ -202,6 +257,12 @@ function Show-Analysis {
     Write-Output "Total files: $($Analysis.TotalFiles)"
     Write-Output "Files in root directory: $($Analysis.RootFiles)"
     Write-Output "Files in subdirectories: $($Analysis.SubdirectoryFiles)"
+    if ($Analysis.HiddenLeftOut -gt 0) {
+        Write-Output "Hidden or system items left out: $($Analysis.HiddenLeftOut) (-IncludeHidden moves them)"
+    }
+    if ($Analysis.LinksLeftOut -gt 0) {
+        Write-Output "Linked folders not entered: $($Analysis.LinksLeftOut)"
+    }
     
     if ($Analysis.FileTypes.Count -gt 0) {
         Write-Output "`nFile types in subdirectories:"
@@ -480,7 +541,8 @@ function Move-FilesToRoot {
 function Remove-EmptyDirectories {
     param (
         [string]$Path,
-        [bool]$AutoRemove = $false
+        [bool]$AutoRemove = $false,
+        [bool]$IncludeHidden = $false
     )
     
     Write-Verbose "Checking for empty subdirectories"
@@ -498,8 +560,9 @@ function Remove-EmptyDirectories {
     
     $deletedCount = 0
     
-    # Get all subdirectories, sorted by depth (deepest first)
-    $subdirs = Get-ChildItem -LiteralPath $Path -Directory -Recurse -Force -ErrorAction SilentlyContinue | 
+    # The same folders the move looked in, deepest first: hidden and system folders (such as .git)
+    # are left alone unless -IncludeHidden is given, and linked folders are never entered.
+    $subdirs = (Get-FolderContent -Path $Path -IncludeHidden $IncludeHidden).Subdirectories |
                Sort-Object { $_.FullName.Split([System.IO.Path]::DirectorySeparatorChar).Count } -Descending
     
     $totalDirs = $subdirs.Count
@@ -515,10 +578,12 @@ function Remove-EmptyDirectories {
                 Write-Progress -Activity "Cleaning Empty Directories" -Status "Processing directory $currentDir of $totalDirs" -CurrentOperation $dir.Name -PercentComplete $percentComplete
             }
             
-            $items = Get-ChildItem -LiteralPath $dir.FullName -Force -ErrorAction SilentlyContinue
+            # Hidden files count as content. DirectoryInfo.Delete() without arguments deletes only an
+            # empty folder, so a folder that could not be read is never deleted with its contents.
+            $items = Get-ChildItem -LiteralPath $dir.FullName -Force -ErrorAction Stop
             
             if ($items.Count -eq 0) {
-                Remove-Item -LiteralPath $dir.FullName -Force -ErrorAction Stop
+                $dir.Delete()
                 Write-Verbose "Deleted empty directory: $($dir.Name)"
                 Write-Log "Deleted empty directory: $($dir.FullName)" -Level INFO
                 $deletedCount++
@@ -560,7 +625,7 @@ try {
     $targetPath = Resolve-TargetPath -Path $targetPath
     
     # Analyze directory
-    $analysis = Get-DirectoryAnalysis -Path $targetPath
+    $analysis = Get-DirectoryAnalysis -Path $targetPath -IncludeHidden $IncludeHidden.IsPresent
     
     # Show analysis
     Show-Analysis -Analysis $analysis
@@ -615,9 +680,9 @@ try {
     # nothing, so it has nothing to clean up.
     if ($result.Moved -gt 0 -and -not $WhatIfPreference) {
         if ($RemoveEmptyDirectories) {
-            Remove-EmptyDirectories -Path $targetPath -AutoRemove $true
+            Remove-EmptyDirectories -Path $targetPath -AutoRemove $true -IncludeHidden $IncludeHidden.IsPresent
         } elseif ([string]::IsNullOrWhiteSpace($Path)) {
-            Remove-EmptyDirectories -Path $targetPath -AutoRemove $false
+            Remove-EmptyDirectories -Path $targetPath -AutoRemove $false -IncludeHidden $IncludeHidden.IsPresent
         }
     }
     
