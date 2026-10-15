@@ -139,6 +139,22 @@ function Get-TargetDirectory {
     }
 }
 
+# Function to turn the path the user gave into the folder's full path, without a trailing
+# separator: ".", "..\Data" and "C:\Data\" all name a folder, and the analysis compares each
+# file's folder with this path to tell the files already in it from the ones in subfolders.
+function Resolve-TargetPath {
+    param (
+        [string]$Path
+    )
+
+    $fullPath = (Get-Item -LiteralPath $Path -Force).FullName
+    $root = [System.IO.Path]::GetPathRoot($fullPath)
+    if ($fullPath.Length -gt $root.Length) {
+        $fullPath = $fullPath.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    }
+    return $fullPath
+}
+
 # Function to analyze directory structure (optimized)
 function Get-DirectoryAnalysis {
     param (
@@ -495,6 +511,7 @@ try {
         Write-Verbose "Using provided path: $targetPath"
         Write-Log "Using provided path: $targetPath" -Level INFO
     }
+    $targetPath = Resolve-TargetPath -Path $targetPath
     
     # Analyze directory
     $analysis = Get-DirectoryAnalysis -Path $targetPath
