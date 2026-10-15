@@ -33,11 +33,14 @@ BeforeAll {
         return $root
     }
 
+    # The files under a folder, as relative paths with / separators, in ordinal order (the same on
+    # every system and culture: "x.txt" before "x_1.txt").
     function Get-RelativeFile {
         param([string]$Root)
-        Get-ChildItem -LiteralPath $Root -Recurse -File -Force |
-            ForEach-Object { $_.FullName.Substring($Root.Length + 1).Replace('\', '/') } |
-            Sort-Object
+        [string[]]$files = Get-ChildItem -LiteralPath $Root -Recurse -File -Force |
+            ForEach-Object { $_.FullName.Substring($Root.Length + 1).Replace('\', '/') }
+        [System.Array]::Sort($files, [System.StringComparer]::Ordinal)
+        return $files
     }
 }
 
