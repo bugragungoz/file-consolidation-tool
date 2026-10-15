@@ -1,170 +1,121 @@
 # File Consolidation Tool
 
-A PowerShell script to consolidate files from nested subdirectories into a single root directory with intelligent conflict resolution and safety features.
+A PowerShell script that moves the files in a folder's subfolders up into the folder itself. Point it
+at a folder such as `D:\Photos` and every file in `D:\Photos\2023\Trip`, `D:\Photos\2024` and so on
+ends up directly in `D:\Photos`. It shows what it found and asks before it moves anything.
 
-## Common Use Cases
-
-- Flattening deeply nested download folders
-- Consolidating photo collections from multiple subdirectories
-- Organizing scattered document files
-- Cleaning up project directories after extraction
-- Merging files from multiple folder structures
-
-## Features
-
-- **Interactive and Automated Modes**: Run with parameters or in interactive mode for guided operation
-- **File Type Filtering**: Choose to move all files or filter by specific extensions
-- **Conflict Resolution**: Multiple strategies for handling duplicate file names (Rename, Overwrite, Skip, or Ask)
-- **Safety First**: Confirmation prompts and `-WhatIf` support to preview changes
-- **Progress Tracking**: Real-time progress bars for large operations
-- **Empty Directory Cleanup**: Optional removal of empty subdirectories after file moves
-- **Detailed Analysis**: Pre-operation directory structure analysis
-- **Comprehensive Logging**: Automatic log file generation with detailed operation history
-
-## Quick Start
-
-**Step 1:** Open PowerShell and run these commands (copy and paste all at once):
-
-```powershell
-# Enable script execution (one-time setup)
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-
-# Download to your Downloads folder
-cd $env:USERPROFILE\Downloads
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/bugragungoz/file-consolidation-tool/master/Consolidate-Files.ps1" -OutFile "Consolidate-Files.ps1"
-
-# Run the script
-.\Consolidate-Files.ps1
-```
-
-When prompted with "Do you want to change the execution policy?", press `Y` and Enter.
-
-**That's it!** The script will guide you through the rest.
-
----
-
-### Alternative: Clone Repository (For Developers)
-
-```powershell
-git clone https://github.com/bugragungoz/file-consolidation-tool.git
-cd file-consolidation-tool
-.\Consolidate-Files.ps1
+```text
+Before                          After
+D:\Photos                       D:\Photos
+├── 2023                        ├── IMG_0001.jpg
+│   └── Trip                    ├── IMG_0001_1.jpg   the second IMG_0001.jpg, renamed
+│       ├── IMG_0001.jpg        └── IMG_0002.jpg
+│       └── IMG_0002.jpg
+└── 2024                        The emptied folders 2023, 2023\Trip and
+    └── IMG_0001.jpg            2024 are deleted if you choose.
 ```
 
 ## Usage
 
-### Interactive Mode
+You need Windows 10 or 11. Windows PowerShell 5.1 comes with them; PowerShell 7 works as well.
 
-Simply run the script without parameters for a guided experience:
+1. Download [`Consolidate-Files.ps1`](Consolidate-Files.ps1): open the file and click **Download raw file**.
+2. Right-click the Start button and open **Terminal** (on Windows 10: **Windows PowerShell**).
+3. Run the script from the folder you saved it to:
 
-```powershell
-.\Consolidate-Files.ps1
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File "$HOME\Downloads\Consolidate-Files.ps1"
+   ```
+
+   `-ExecutionPolicy Bypass` lets this one run start; it changes no setting on your computer.
+4. The script asks for the folder, shows what is in its subfolders, asks which file types to move and
+   asks once more before it moves them. If a name is already taken, it asks what to do. At the end it
+   offers to delete the subfolders the move left empty.
+
+```text
+Enter the target directory path: D:\Photos
+...
+Files in subdirectories: 3
+
+File types in subdirectories:
+  .jpg : 3 files
+...
+Enter your choice (1 or 2): 1
+
+Confirm
+Move the files in the subfolders of 'D:\Photos' into that folder?
+[Y] Yes  [N] No  [?] Help (default is "N"): Y
 ```
 
-The script will:
-1. Prompt for the target directory
-2. Analyze the directory structure
-3. Display file statistics
-4. Ask for file type preferences
-5. Request confirmation before making changes
-6. Handle conflicts interactively
-
-### Automated Mode
-
-Use parameters for unattended operation:
+To see what would happen without changing anything, add `-Path` and `-WhatIf`: the script lists every
+move it would make, with the new names of files whose name is taken.
 
 ```powershell
-# Move all files, rename conflicts, auto-remove empty directories
-.\Consolidate-Files.ps1 -Path "C:\MyFolder" -ConflictAction Rename -RemoveEmptyDirectories -Force
-
-# Move only specific file types
-.\Consolidate-Files.ps1 -Path "C:\MyFolder" -ExtensionFilter ".jpg",".png",".gif" -ConflictAction Skip
-
-# Preview changes without making them (WhatIf)
-.\Consolidate-Files.ps1 -Path "C:\MyFolder" -WhatIf
+powershell -ExecutionPolicy Bypass -File "$HOME\Downloads\Consolidate-Files.ps1" -Path "D:\Photos" -WhatIf
 ```
 
-## Parameters
+### Parameters
 
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `-Path` | String | Target directory path to consolidate | Interactive prompt |
-| `-ExtensionFilter` | String[] | File extensions to move (e.g., ".txt", ".pdf") | All files |
-| `-ConflictAction` | String | How to handle conflicts: `Rename`, `Overwrite`, `Skip`, `Ask` | `Ask` |
-| `-RemoveEmptyDirectories` | Switch | Automatically remove empty directories | `$false` |
-| `-Force` | Switch | Skip confirmation prompts | `$false` |
-| `-NoLog` | Switch | Disable logging to file | `$false` |
-| `-WhatIf` | Switch | Preview changes without executing | `$false` |
-| `-Verbose` | Switch | Show detailed operation information | `$false` |
+With `-Path`, the script asks no questions except the confirmation before it moves (skip it with
+`-Force`) and, with the default `-ConflictAction Ask`, what to do when a name is taken.
 
-## Examples
+| Parameter | What it does |
+| --- | --- |
+| `-Path` | The folder to consolidate. Without it, the script asks. |
+| `-ExtensionFilter` | Moves only these file types: `jpg`, `.jpg` or `*.jpg`, several separated by commas (`jpg,png`). Without it, every file is moved. |
+| `-ConflictAction` | When a file with the same name is already in the folder: `Rename` (`photo_1.jpg`), `Overwrite`, `Skip`, or `Ask` for each one (the default). |
+| `-RemoveEmptyDirectories` | Deletes the subfolders the move left empty. |
+| `-IncludeHidden` | Also moves hidden and system files, and the files in hidden folders. |
+| `-Force` | Moves without the confirmation question. |
+| `-NoLog` | Writes no log file. |
+| `-WhatIf` | Lists every move and changes nothing. |
+| `-Confirm` | Asks before each file is moved and each empty folder is deleted. |
 
-### Example 1: Consolidate All Files
+### Examples
+
+Run these from the folder the script is in (`cd $HOME\Downloads` first).
 
 ```powershell
-.\Consolidate-Files.ps1 -Path "D:\Downloads\Projects"
+# Only photos; number the ones whose name is taken
+powershell -ExecutionPolicy Bypass -File .\Consolidate-Files.ps1 -Path "D:\Photos" -ExtensionFilter jpg,png -ConflictAction Rename
+
+# Everything, no questions: keep files whose name is taken where they are, delete the emptied folders
+powershell -ExecutionPolicy Bypass -File .\Consolidate-Files.ps1 -Path "D:\Downloads\Course" -ConflictAction Skip -RemoveEmptyDirectories -Force
 ```
 
-Moves all files from subdirectories to `D:\Downloads\Projects`, prompting for conflict resolution.
+`Get-Help .\Consolidate-Files.ps1 -Full` shows the same help in PowerShell.
 
-### Example 2: Move Specific File Types
+## What it leaves alone
+
+- **Files already in the folder** stay where they are; only files in subfolders move.
+- **Hidden and system files and folders**, such as `desktop.ini`, `Thumbs.db` or a `.git` folder,
+  stay unless you give `-IncludeHidden`. The analysis says how many it left out.
+- **Linked folders** (junctions and symbolic links) are never entered: their files live elsewhere.
+- **The script and its log** are never moved, even when they are in a subfolder.
+- **Whole drives and system folders**: the script refuses `C:\`, the Windows folder, Program Files,
+  ProgramData, `C:\Users` and a profile folder such as `C:\Users\you`. Choose a folder inside them.
+
+Moves are not undone automatically. Every run writes a log next to the script,
+`FileConsolidation_<date>_<time>.log`, that lists each file's old and new path; try `-WhatIf` first on
+a folder that matters. The script ends with exit code 0, or 1 when a file could not be moved (for
+example because a program has it open) or the run stopped with an error.
+
+## Tests
+
+The tests run the script on temporary folders with [Pester](https://pester.dev) 5:
 
 ```powershell
-.\Consolidate-Files.ps1 -Path "C:\Photos" -ExtensionFilter ".jpg",".jpeg",".png" -ConflictAction Rename
+Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+Invoke-Pester ./tests
 ```
 
-Moves only image files, automatically renaming any conflicts.
-
-### Example 3: Clean Operation
-
-```powershell
-.\Consolidate-Files.ps1 -Path "C:\Workspace" -RemoveEmptyDirectories -Force -ConflictAction Skip
-```
-
-Moves files, skips conflicts, removes empty directories, no prompts.
-
-### Example 4: Safe Preview
-
-```powershell
-.\Consolidate-Files.ps1 -Path "C:\ImportantFiles" -WhatIf -Verbose
-```
-
-Shows what would happen without making any changes.
-
-## Troubleshooting
-
-**Issue**: Script execution blocked ("running scripts is disabled on this system")  
-**Solution**: Enable script execution (see Step 1 in Installation section above)
-
-**Issue**: "Access Denied" errors  
-**Solution**: Run PowerShell as Administrator or check file permissions
-
-**Issue**: Files not moving  
-**Solution**: Check that files aren't open in another program, use `-Verbose` flag for details
-
-## Conflict Resolution Strategies
-
-When a file with the same name already exists in the destination:
-
-- **Rename**: Appends a number to the filename (e.g., `document.txt` becomes `document_1.txt`)
-- **Overwrite**: Replaces the existing file with the new one
-- **Skip**: Leaves the existing file and doesn't move the new one
-- **Ask**: Prompts for a decision on each conflict (with options to apply to all)
-
-## Safety Features
-
-- **Validation**: Ensures the target directory exists before proceeding
-- **Error Handling**: Gracefully handles permission errors and locked files
-- **Confirmation Prompts**: Requires user approval before making changes (unless `-Force` is used)
-- **WhatIf Support**: Preview mode to see changes before executing
-- **Progress Tracking**: Visual feedback during long operations
+GitHub Actions runs them, with PSScriptAnalyzer, in Windows PowerShell 5.1 and PowerShell 7 for every
+push to master and every pull request.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+[MIT](LICENSE)
 
-## Author
+This script was developed with assistance from an AI model: Claude 4.5 Sonnet.
 
-**Bugra Güngöz** ([@bugragungoz](https://github.com/bugragungoz))
-
-Developed with Claude 4.5 Sonnet AI for efficient PowerShell-based file management.
+It was later revised and updated with Claude Opus 5.5.
