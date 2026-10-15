@@ -6,7 +6,7 @@
 
 BeforeDiscovery {
     # -Skip is decided while Pester discovers the tests, before BeforeAll runs.
-    $OnWindows = [System.Environment]::OSVersion.Platform -eq 'Win32NT'
+    $script:OnWindows = [System.Environment]::OSVersion.Platform -eq 'Win32NT'
 }
 
 BeforeAll {
@@ -271,7 +271,7 @@ Describe 'Consolidate-Files.ps1' {
             Test-Path -LiteralPath (Join-Path $root 'emptylink') | Should -BeTrue
         }
 
-        It 'leaves system files such as desktop.ini where they are' -Skip:(-not $OnWindows) {
+        It 'leaves system files such as desktop.ini where they are' -Skip:(-not $script:OnWindows) {
             $root = New-Tree 'system' 'a/desktop.ini', 'a/visible.txt'
             $item = Get-Item -LiteralPath (Join-Path $root 'a/desktop.ini') -Force
             $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::System
@@ -299,7 +299,7 @@ Describe 'Consolidate-Files.ps1' {
             Test-Path -LiteralPath (Join-Path $root 'c') | Should -BeTrue
         }
 
-        It 'exits with code 1 when a file could not be moved' -Skip:(-not $OnWindows) {
+        It 'exits with code 1 when a file could not be moved' -Skip:(-not $script:OnWindows) {
             $root = New-Tree 'locked' 'a/locked.txt', 'a/free.txt'
             $stream = [System.IO.File]::Open((Join-Path $root 'a/locked.txt'), 'Open', 'Read', 'None')
             try {
