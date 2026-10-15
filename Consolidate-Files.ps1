@@ -766,14 +766,18 @@ try {
         Write-Log "No extension filter specified, processing all file types" -Level INFO
     }
 
-    # Ask before moving anything. ShouldProcess alone asks only when -Confirm is given, so the
-    # question goes through ShouldContinue. -Force skips it, and -WhatIf needs no answer: it
-    # changes nothing and lists each move instead.
+    # Ask before moving anything. ShouldProcess alone asks only when -Confirm is given, and
+    # ShouldContinue takes Enter as Yes, so the question is a choice whose default is No. -Force
+    # skips it, and -WhatIf needs no answer: it changes nothing and lists each move instead.
     if ($WhatIfPreference) {
         Write-Log "WhatIf: listing the moves without making them" -Level INFO
     } elseif (-not $Force) {
         $question = "Move the files in the subfolders of '$targetPath' into that folder?"
-        if ($PSCmdlet.ShouldContinue($question, "Confirm")) {
+        $choices = [System.Management.Automation.Host.ChoiceDescription[]]@(
+            (New-Object System.Management.Automation.Host.ChoiceDescription '&Yes', 'Move the files.'),
+            (New-Object System.Management.Automation.Host.ChoiceDescription '&No', 'Change nothing.')
+        )
+        if ($Host.UI.PromptForChoice('Confirm', $question, $choices, 1) -eq 0) {
             Write-Log "User confirmed operation" -Level INFO
         } else {
             Write-Host "Operation cancelled."
