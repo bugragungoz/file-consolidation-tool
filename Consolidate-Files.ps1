@@ -602,12 +602,13 @@ function Move-FilesToRoot {
                 continue
             }
 
-            # Move file with appropriate action
+            # Move file with appropriate action. -Confirm:$false because the question above was
+            # this move's; Move-Item would ask again, and a No there would count as moved.
             if ($resolution.Action -eq 'Overwrite') {
-                Move-Item -LiteralPath $file.FullName -Destination $resolution.Destination -Force -ErrorAction Stop
+                Move-Item -LiteralPath $file.FullName -Destination $resolution.Destination -Force -Confirm:$false -ErrorAction Stop
                 Write-LogEntry "Moved (overwrite): $($file.FullName) -> $($resolution.Destination)" -Level INFO
             } else {
-                Move-Item -LiteralPath $file.FullName -Destination $resolution.Destination -ErrorAction Stop
+                Move-Item -LiteralPath $file.FullName -Destination $resolution.Destination -Confirm:$false -ErrorAction Stop
                 Write-LogEntry "Moved: $($file.FullName) -> $($resolution.Destination)" -Level SUCCESS
             }
 
